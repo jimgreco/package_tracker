@@ -558,7 +558,10 @@ export function AuthForm({
         {busy ? <Spinner /> : <GoogleMark />}Continue with Google
       </button>
       <small className="auth-caption">
-        Sign in or create an account with Google.
+        Sign in or create an account with Google.{" "}
+        <a className="privacy-link" href="/privacy">
+          Privacy policy
+        </a>
       </small>
       <div className="auth-household-note">
         <Users size={20} />

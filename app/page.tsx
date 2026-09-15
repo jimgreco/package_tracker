@@ -708,6 +708,10 @@ export default function Page() {
                   {data.settings.demo
                     ? "Sample data"
                     : "Updates run in the background"}
+                  {" · "}
+                  <a className="privacy-link" href="/privacy">
+                    Privacy policy
+                  </a>
                 </span>
               </footer>
             </>
