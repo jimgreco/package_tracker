@@ -1,0 +1,41 @@
+{
+  "name": "doorstep",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --hostname 127.0.0.1 --port 4317",
+    "build": "next build",
+    "start": "next start --hostname 0.0.0.0 --port 4317",
+    "worker": "tsx --env-file=.env scripts/worker.ts",
+    "db:migrate": "tsx --env-file=.env scripts/migrate.ts",
+    "db:seed": "tsx --env-file=.env scripts/seed.ts",
+    "db:local": "bash scripts/local-db.sh",
+    "setup:local": "bash scripts/setup-local.sh",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --env-file=.env --test tests/*.test.ts",
+    "test:integration": "tsx --env-file=.env --test tests/*.integration.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1000.0",
+    "@js-temporal/polyfill": "^0.5.1",
+    "cheerio": "^1.2.0",
+    "jose": "^6.2.12",
+    "lucide-react": "^0.577.0",
+    "next": "16.3.5",
+    "openai": "7.15.0",
+    "pg": "8.23.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "tsx": "^4.23.13",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "@types/pg": "^8.16.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "prettier": "^3.9.6",
+    "typescript": "^5.9.3"
+  },
+  "type": "module"
+}

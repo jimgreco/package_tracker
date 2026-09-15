@@ -1,0 +1,55 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: doorstep
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: doorstep
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U doorstep -d doorstep"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+  migrate:
+    build: .
+    command: ["./node_modules/.bin/tsx", "scripts/migrate.ts"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://doorstep:${POSTGRES_PASSWORD}@db:5432/doorstep
+      DATABASE_SSL: "false"
+      DEMO_MODE: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+  web:
+    build: .
+    ports: ["127.0.0.1:4317:4317"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://doorstep:${POSTGRES_PASSWORD}@db:5432/doorstep
+      DATABASE_SSL: "false"
+      DEMO_MODE: "false"
+    volumes: ["uploads:/app/.local/uploads"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+  worker:
+    build: .
+    command: ["./node_modules/.bin/tsx", "scripts/worker.ts"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://doorstep:${POSTGRES_PASSWORD}@db:5432/doorstep
+      DATABASE_SSL: "false"
+      DEMO_MODE: "false"
+    volumes: ["uploads:/app/.local/uploads"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+volumes:
+  postgres:
+  uploads:
