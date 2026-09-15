@@ -12,7 +12,8 @@ trap 'rm -f "$DOCKER_CONFIG/config.json"' EXIT
 export COMPOSE_PROFILES=doorstep
 export DOORSTEP_IMAGE="$image"
 compose() { docker-compose -f docker-compose.yml "$@"; }
-compose config --services | grep -qx doorstep
+# Drain Compose output so an early grep exit cannot cause SIGPIPE under pipefail.
+compose config --services | grep -x doorstep >/dev/null
 python3 - <<'PY'
 from pathlib import Path
 import secrets,os
