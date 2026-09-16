@@ -9,6 +9,7 @@ import { normalizeEstimate } from "./calendar";
 import { safeImageDownload, storeImage } from "./storage";
 import type { Item } from "./types";
 import type { PoolClient } from "pg";
+import { retailerReference, trackingCarrier } from "./tracking-identity";
 const dateValue = (v: string | null) =>
   v && Number.isFinite(Date.parse(v)) ? new Date(v).toISOString() : null;
 export function cleanEmail(html: string, text: string) {
@@ -271,7 +272,10 @@ export async function applyExtraction(emailId: string, input: Extracted) {
     );
   for (const o of orders) {
     o.items = await cleanItems(o.items);
-    for (const s of o.shipments) s.items = await cleanItems(s.items);
+    for (const s of o.shipments) {
+      s.items = await cleanItems(s.items);
+      s.carrier = trackingCarrier(s.carrier);
+    }
   }
   await transaction(async (c) => {
     await c.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
@@ -307,14 +311,19 @@ export async function applyExtraction(emailId: string, input: Extracted) {
           [e.household_id, merchantKey, o.orderNumber],
         )
       ).rows[0];
-      // A shipping update often omits the merchant/order number. Match a known tracking number first.
+      // Shipping updates can omit the order number; use a source-backed package identity.
       if (!order) {
         for (const s of o.shipments) {
-          if (!s.trackingNumber) continue;
+          const reference = retailerReference(e.links, s.trackingUrl);
+          const code =
+            reference === `amazon:${s.trackingNumber}`
+              ? null
+              : s.trackingNumber;
+          if (!code && !reference) continue;
           const matches = (
             await c.query(
-              "SELECT o.* FROM orders o JOIN shipments s ON s.order_id=o.id WHERE s.household_id=$1 AND s.tracking_number=$2 AND s.created_at>now()-interval '120 days' AND ($3::text IS NULL OR lower(s.carrier)=lower($3) OR s.carrier IS NULL)",
-              [e.household_id, s.trackingNumber, s.carrier],
+              "SELECT o.* FROM orders o JOIN shipments s ON s.order_id=o.id WHERE s.household_id=$1 AND (s.tracking_number=$2 OR s.retailer_reference=$4) AND s.created_at>now()-interval '120 days' AND ($3::text IS NULL OR lower(s.carrier)=lower($3) OR s.carrier IS NULL)",
+              [e.household_id, code, s.carrier, reference],
             )
           ).rows;
           if (matches.length === 1) {
@@ -360,6 +369,8 @@ export async function applyExtraction(emailId: string, input: Extracted) {
           .replace(/[^a-z0-9]/gi, "")
           .toLowerCase();
         let tracking = s.trackingNumber?.trim() || null;
+        const reference = retailerReference(e.links, s.trackingUrl);
+        if (reference === `amazon:${tracking}`) tracking = null;
         if (
           tracking &&
           !evidenceText.includes(
@@ -373,14 +384,15 @@ export async function applyExtraction(emailId: string, input: Extracted) {
         const url = safeUrl(s.trackingUrl);
         const trackingUrl =
           url && (e.links as string[]).includes(url) ? url : null;
-        const known = tracking
-          ? (
-              await c.query(
-                "SELECT * FROM shipments WHERE household_id=$1 AND tracking_number=$2 AND created_at>now()-interval '120 days' AND ($3::text IS NULL OR lower(carrier)=lower($3) OR carrier IS NULL) FOR UPDATE",
-                [e.household_id, tracking, s.carrier],
-              )
-            ).rows
-          : [];
+        const known =
+          tracking || reference
+            ? (
+                await c.query(
+                  "SELECT * FROM shipments WHERE household_id=$1 AND (tracking_number=$2 OR retailer_reference=$4) AND created_at>now()-interval '120 days' AND ($3::text IS NULL OR lower(carrier)=lower($3) OR carrier IS NULL) FOR UPDATE",
+                  [e.household_id, tracking, s.carrier, reference],
+                )
+              ).rows
+            : [];
         let existing = known.length === 1 ? known[0] : null;
         if (known.length > 1) {
           review = true;
@@ -388,12 +400,12 @@ export async function applyExtraction(emailId: string, input: Extracted) {
         }
         const pending = (
           await c.query(
-            "SELECT * FROM shipments WHERE order_id=$1 AND tracking_number IS NULL AND status='ordered' FOR UPDATE",
+            "SELECT * FROM shipments WHERE order_id=$1 AND tracking_number IS NULL AND retailer_reference IS NULL AND status='ordered' FOR UPDATE",
             [order.id],
           )
         ).rows;
         if (!existing && pending.length === 1) existing = pending[0];
-        if (!tracking && s.status === "ordered" && !existing) {
+        if (!tracking && !reference && s.status === "ordered" && !existing) {
           const shipped = (
             await c.query("SELECT id FROM shipments WHERE order_id=$1", [
               order.id,
@@ -438,7 +450,7 @@ export async function applyExtraction(emailId: string, input: Extracted) {
             !terminal;
           saved = (
             await c.query(
-              `UPDATE shipments SET items=CASE WHEN jsonb_array_length($1::jsonb)>0 THEN $1::jsonb ELSE items END,carrier=coalesce(carrier,$2),tracking_number=coalesce(tracking_number,$3),tracking_url=coalesce($4,tracking_url),status=CASE WHEN $5 THEN $6 ELSE status END,status_at=CASE WHEN $5 THEN $7::timestamptz ELSE status_at END,shipped_at=coalesce(shipped_at,$8),estimate=CASE WHEN NOT manual_override AND $9::jsonb<>'null'::jsonb AND (estimate_at IS NULL OR estimate_at<=$7::timestamptz) AND NOT $10 THEN $9::jsonb ELSE estimate END,estimate_at=CASE WHEN NOT manual_override AND $9::jsonb<>'null'::jsonb AND (estimate_at IS NULL OR estimate_at<=$7::timestamptz) AND NOT $10 THEN $7::timestamptz ELSE estimate_at END,delivered_at=CASE WHEN $5 THEN coalesce($11,delivered_at) ELSE delivered_at END,needs_review=needs_review OR $12,review_reason=coalesce($13,review_reason),version=version+1,updated_at=now() WHERE id=$14 RETURNING *`,
+              `UPDATE shipments SET retailer_reference=coalesce(retailer_reference,$15),items=CASE WHEN jsonb_array_length($1::jsonb)>0 THEN $1::jsonb ELSE items END,carrier=coalesce(carrier,$2),tracking_number=coalesce(tracking_number,$3),tracking_url=coalesce($4,tracking_url),status=CASE WHEN $5 THEN $6 ELSE status END,status_at=CASE WHEN $5 THEN $7::timestamptz ELSE status_at END,shipped_at=coalesce(shipped_at,$8),estimate=CASE WHEN NOT manual_override AND $9::jsonb<>'null'::jsonb AND (estimate_at IS NULL OR estimate_at<=$7::timestamptz) AND NOT $10 THEN $9::jsonb ELSE estimate END,estimate_at=CASE WHEN NOT manual_override AND $9::jsonb<>'null'::jsonb AND (estimate_at IS NULL OR estimate_at<=$7::timestamptz) AND NOT $10 THEN $7::timestamptz ELSE estimate_at END,delivered_at=CASE WHEN $5 THEN coalesce($11,delivered_at) ELSE delivered_at END,needs_review=needs_review OR $12,review_reason=coalesce($13,review_reason),version=version+1,updated_at=now() WHERE id=$14 RETURNING *`,
               [
                 JSON.stringify(items),
                 s.carrier,
@@ -454,13 +466,14 @@ export async function applyExtraction(emailId: string, input: Extracted) {
                 review,
                 reasons.join(" ") || null,
                 existing.id,
+                reference,
               ],
             )
           ).rows[0];
         } else
           saved = (
             await c.query(
-              `INSERT INTO shipments(household_id,order_id,items,carrier,tracking_number,tracking_url,status,status_at,shipped_at,estimate,estimate_at,delivered_at,needs_review,review_reason,tracking_state) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$8,$11,$12,$13,$14) RETURNING *`,
+              `INSERT INTO shipments(household_id,order_id,items,carrier,tracking_number,tracking_url,status,status_at,shipped_at,estimate,estimate_at,delivered_at,needs_review,review_reason,tracking_state,retailer_reference) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$8,$11,$12,$13,$14,$15) RETURNING *`,
               [
                 e.household_id,
                 order.id,
@@ -480,6 +493,7 @@ export async function applyExtraction(emailId: string, input: Extracted) {
                     ? "pending"
                     : "unconfigured"
                   : "none",
+                reference,
               ],
             )
           ).rows[0];

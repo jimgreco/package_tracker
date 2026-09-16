@@ -18,7 +18,7 @@ import {
   quickShipmentAction,
 } from "../lib/shipments";
 import { calendarFields } from "../lib/calendar";
-import { applyTracker } from "../lib/tracking";
+import { applyTracker, registerTracking } from "../lib/tracking";
 import { claimJob, runOne } from "../lib/jobs";
 import { encrypt, randomToken } from "../lib/security";
 import { syncShipment } from "../lib/google";
@@ -56,6 +56,7 @@ before(async () => {
     "005_calendar_household_state.sql",
     "006_gmail.sql",
     "007_dismissed.sql",
+    "008_retailer_reference.sql",
   ])
     await query(await readFile("db/" + file, "utf8"));
   const [h] = await query(
@@ -734,6 +735,157 @@ test("nonphysical receipts are ignored even if the model labels the overall emai
       (s) => s.orderNumber === "mixed-digital",
     ),
   );
+});
+
+test("Amazon retailer references match later emails without creating carrier tracking jobs", async () => {
+  const link =
+    "https://www.amazon.com/progress-tracker/package?shipmentId=AMZPACKAGE1";
+  const first = await incoming(
+    "amazon-reference:first",
+    `A lamp is shipping. ${link}`,
+  );
+  const out = extraction("AMZPACKAGE1");
+  out.orders[0].orderNumber = "amazon-reference";
+  out.orders[0].shipments[0].carrier = null;
+  out.orders[0].shipments[0].trackingUrl = link;
+  await applyExtraction(first.id, out);
+  const [row] = await query(
+    "SELECT * FROM shipments WHERE household_id=$1 AND retailer_reference=$2",
+    [ctx.householdId, "amazon:AMZPACKAGE1"],
+  );
+  assert.equal(row.tracking_number, null);
+  assert.equal(row.tracking_state, "none");
+  assert.equal(
+    (
+      await query(
+        "SELECT id FROM jobs WHERE kind='track_register' AND payload->>'shipmentId'=$1",
+        [row.id],
+      )
+    ).length,
+    0,
+  );
+
+  const second = await incoming(
+    "amazon-reference:second",
+    `The lamp was delivered. ${link}`,
+  );
+  const delivered = extraction(null, "delivered");
+  delivered.orders[0].orderNumber = null;
+  delivered.orders[0].shipments[0].trackingUrl = link;
+  await applyExtraction(second.id, delivered);
+  const matched = await query(
+    "SELECT * FROM shipments WHERE household_id=$1 AND retailer_reference=$2",
+    [ctx.householdId, "amazon:AMZPACKAGE1"],
+  );
+  assert.equal(matched.length, 1);
+  assert.equal(matched[0].id, row.id);
+  assert.equal(matched[0].status, "delivered");
+  assert.equal(
+    (
+      await query("SELECT * FROM shipment_emails WHERE shipment_id=$1", [
+        row.id,
+      ])
+    ).length,
+    2,
+  );
+});
+
+test("distinct Amazon package references stay separate and real carrier codes are retained", async () => {
+  for (const id of ["AMZSPLIT1", "AMZSPLIT2"]) {
+    const link = `https://www.amazon.com/progress-tracker/package?shipmentId=${id}`;
+    const email = await incoming(
+      `amazon-split:${id}`,
+      `Physical items ordered. ${link}`,
+    );
+    const out = extraction(id, "ordered");
+    out.orders[0].orderNumber = "amazon-split";
+    out.orders[0].shipments[0].carrier = null;
+    out.orders[0].shipments[0].trackingUrl = link;
+    await applyExtraction(email.id, out);
+  }
+  const before = await query(
+    "SELECT * FROM shipments WHERE household_id=$1 AND retailer_reference IN ('amazon:AMZSPLIT1','amazon:AMZSPLIT2')",
+    [ctx.householdId],
+  );
+  assert.equal(before.length, 2);
+  const link =
+    "https://www.amazon.com/progress-tracker/package?shipmentId=AMZSPLIT1";
+  const email = await incoming(
+    "amazon-real-tracking",
+    `Package shipped with UPS code AMZREALTRACK. ${link}`,
+  );
+  const out = extraction("AMZREALTRACK");
+  out.orders[0].orderNumber = "amazon-split";
+  out.orders[0].shipments[0].trackingUrl = link;
+  await applyExtraction(email.id, out);
+  const after = await query(
+    "SELECT * FROM shipments WHERE household_id=$1 AND retailer_reference IN ('amazon:AMZSPLIT1','amazon:AMZSPLIT2')",
+    [ctx.householdId],
+  );
+  assert.equal(after.length, 2);
+  assert.equal(
+    after.find((s) => s.retailer_reference === "amazon:AMZSPLIT1")!
+      .tracking_number,
+    "AMZREALTRACK",
+  );
+  assert.equal(
+    after.find((s) => s.retailer_reference === "amazon:AMZSPLIT2")!
+      .tracking_number,
+    null,
+  );
+});
+
+test("legacy FedEx Ground shipments register using the FedEx carrier identifier", async () => {
+  const email = await incoming(
+    "fedex-service",
+    "FedEx Ground package FEDEXTRACK is on the way.",
+  );
+  const out = extraction("FEDEXTRACK");
+  out.orders[0].orderNumber = "fedex-service";
+  out.orders[0].shipments[0].carrier = "FedEx Ground";
+  await applyExtraction(email.id, out);
+  const [row] = await query(
+    "SELECT * FROM shipments WHERE household_id=$1 AND tracking_number='FEDEXTRACK'",
+    [ctx.householdId],
+  );
+  assert.equal(row.carrier, "FedEx");
+  // Existing records can still contain service names; registration must handle them too.
+  await query("UPDATE shipments SET carrier='FedEx Ground' WHERE id=$1", [
+    row.id,
+  ]);
+  const previousFetch = globalThis.fetch;
+  const previousKey = process.env.EASYPOST_API_KEY;
+  let calls = 0;
+  process.env.EASYPOST_API_KEY = "fixture-easypost";
+  globalThis.fetch = async (input, init) => {
+    assert.equal(String(input), "https://api.easypost.com/v2/trackers");
+    assert.equal(init?.method, "POST");
+    assert.deepEqual(JSON.parse(String(init?.body)), {
+      tracker: { tracking_code: "FEDEXTRACK", carrier: "FedEx" },
+    });
+    calls++;
+    return Response.json({
+      id: "trk_fixture_fedex",
+      tracking_code: "FEDEXTRACK",
+      carrier: "FedEx",
+      status: "in_transit",
+      updated_at: "2026-09-14T12:00:00Z",
+      tracking_details: [],
+    });
+  };
+  try {
+    await registerTracking(row.id);
+    assert.equal(calls, 1);
+    const [saved] = await query("SELECT * FROM shipments WHERE id=$1", [
+      row.id,
+    ]);
+    assert.equal(saved.tracker_id, "trk_fixture_fedex");
+    assert.equal(saved.tracking_state, "active");
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousKey === undefined) delete process.env.EASYPOST_API_KEY;
+    else process.env.EASYPOST_API_KEY = previousKey;
+  }
 });
 
 test("quick actions are household scoped, idempotent, reversible and protect confirmed delivery", async () => {

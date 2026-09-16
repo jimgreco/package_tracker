@@ -4,6 +4,7 @@ import { shipment } from "./shipments";
 import { AppError, hash } from "./security";
 import type { Estimate, Status } from "./types";
 import { STATUSES } from "./types";
+import { trackingCarrier } from "./tracking-identity";
 export const trackerSchema = z.object({
   id: z.string().startsWith("trk_"),
   tracking_code: z.string(),
@@ -88,7 +89,7 @@ export async function registerTracking(id: string) {
       await easy("/trackers", "POST", {
         tracker: {
           tracking_code: s.trackingNumber,
-          ...(s.carrier ? { carrier: s.carrier } : {}),
+          ...(s.carrier ? { carrier: trackingCarrier(s.carrier) } : {}),
         },
       }),
     );

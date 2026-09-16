@@ -45,6 +45,7 @@ before(async () => {
     "005_calendar_household_state.sql",
     "006_gmail.sql",
     "007_dismissed.sql",
+    "008_retailer_reference.sql",
   ])
     await query(await readFile("db/" + file, "utf8"));
   keys = await generateKeyPair("RS256");
