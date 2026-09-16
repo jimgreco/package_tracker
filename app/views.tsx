@@ -171,10 +171,12 @@ export function CalendarView({
 }
 export function InboxView({
   emails,
+  timeZone,
   open,
   paste,
 }: {
   emails: Email[];
+  timeZone: string;
   open: (id: string) => void;
   paste: () => void;
 }) {
@@ -184,8 +186,8 @@ export function InboxView({
         <div>
           <h2>Your shipping inbox</h2>
           <p>
-            Original emails, extracted details, and anything that needs a second
-            look.
+            Package emails, newest sent date first. Non-package emails are
+            skipped.
           </p>
         </div>
         <button className="secondary" onClick={paste}>
@@ -230,7 +232,13 @@ export function InboxView({
               >
                 {e.status.replaceAll("_", " ")}
               </span>
-              <time>{dateLabel(e.receivedAt)}</time>
+              <time dateTime={e.sentAt || e.receivedAt}>
+                {e.sentAt ? "Sent" : "Imported"}{" "}
+                {new Date(e.sentAt || e.receivedAt).toLocaleDateString(
+                  "en-US",
+                  { timeZone, month: "short", day: "numeric", year: "numeric" },
+                )}
+              </time>
               <ChevronRight size={18} />
             </button>
           ))}

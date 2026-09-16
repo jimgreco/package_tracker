@@ -2160,7 +2160,8 @@ footer {
     gap: 12px;
   }
   .inbox-row time {
-    display: none;
+    display: block;
+    font-size: 12px;
   }
   .detail-body {
     padding: 24px;
@@ -2537,4 +2538,50 @@ footer {
 }
 .gmail-settings .button-row {
   flex-wrap: wrap;
+}
+
+.sort-explanation {
+  color: var(--muted);
+  font-size: 12px;
+  margin: -4px 0 14px;
+}
+.shipment-entry {
+  min-width: 0;
+}
+.shipment-entry .shipment-card {
+  border-radius: 13px 13px 0 0;
+}
+.package-quick-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  padding: 8px 16px;
+  border: 1px solid var(--line);
+  border-top: 0;
+  border-radius: 0 0 13px 13px;
+  background: #fafbfc;
+  color: var(--muted);
+  font-size: 12px;
+}
+.package-quick-actions > div {
+  display: flex;
+  gap: 12px;
+  margin-left: auto;
+}
+.package-quick-actions .subtle-button {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+@media (max-width: 600px) {
+  .package-quick-actions {
+    padding: 7px 12px;
+  }
+  .inbox-row time {
+    white-space: normal;
+  }
 }

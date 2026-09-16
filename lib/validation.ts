@@ -34,7 +34,11 @@ export const manualSchema = z
   .strict();
 export const extractionSchema = z
   .object({
-    relevant: z.boolean(),
+    relevant: z
+      .boolean()
+      .describe(
+        "True only for an actual order or delivery of physical goods. Digital purchases, digital subscriptions, e-tickets, services and documents available online are irrelevant. Recurring deliveries of physical goods remain relevant.",
+      ),
     reviewReason: z.string().nullable(),
     orders: z.array(
       z
@@ -46,6 +50,11 @@ export const extractionSchema = z
           shipments: z.array(
             z
               .object({
+                physicalDelivery: z
+                  .boolean()
+                  .describe(
+                    "True only for tangible goods ordered, shipped, delivered or awaiting physical pickup. A digital download, online document package, booking or subscription is false. A tracking number is not required.",
+                  ),
                 items: z.array(itemSchema),
                 carrier: z.string().nullable(),
                 trackingNumber: z.string().nullable(),

@@ -7,6 +7,14 @@ export function todayInZone(zone: string) {
     day: "2-digit",
   }).format(new Date());
 }
+export function messageDateLabel(date: string, zone: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: zone,
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(date));
+}
 export function dateLabel(
   date: string,
   options: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" },

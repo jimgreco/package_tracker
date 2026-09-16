@@ -17,6 +17,7 @@ import {
   dashboard,
   detail,
   saveManual,
+  quickShipmentAction,
   shipments,
   shipment,
   updateHousehold,
@@ -224,6 +225,18 @@ async function handle(
         return json(await detail(id, ctx));
       if (path.length === 2 && method === "PATCH")
         return json({ id: await saveManual(await jsonBody(req), ctx, id) });
+      if (
+        path.length === 3 &&
+        ["deliver", "dismiss", "restore"].includes(path[2]) &&
+        method === "POST"
+      ) {
+        await quickShipmentAction(
+          id,
+          ctx,
+          z.enum(["deliver", "dismiss", "restore"]).parse(path[2]),
+        );
+        return json({ ok: true });
+      }
       if (path[2] === "refresh" && method === "POST") {
         requireReal(ctx);
         const { row } = await shipment(id, ctx.householdId);
@@ -322,6 +335,7 @@ async function handle(
           from: email.sender,
           text: email.body_text,
           receivedAt: email.received_at,
+          sentAt: email.sent_at,
           status: email.status,
           error: email.error,
           extraction: email.extraction,

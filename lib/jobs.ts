@@ -103,7 +103,7 @@ export async function schedule() {
     if (process.env.EASYPOST_API_KEY) {
       const due = (
         await c.query(
-          `SELECT id,household_id,tracker_id FROM shipments WHERE is_demo=false AND archived_at IS NULL AND tracking_number IS NOT NULL AND status NOT IN ('delivered','cancelled','return_to_sender') AND tracking_state<>'unsupported' AND (last_checked_at IS NULL OR last_checked_at<now()-CASE WHEN status='out_for_delivery' THEN interval '15 minutes' ELSE interval '4 hours' END) LIMIT 200`,
+          `SELECT id,household_id,tracker_id FROM shipments WHERE is_demo=false AND archived_at IS NULL AND dismissed_at IS NULL AND tracking_number IS NOT NULL AND status NOT IN ('delivered','cancelled','return_to_sender') AND tracking_state<>'unsupported' AND (last_checked_at IS NULL OR last_checked_at<now()-CASE WHEN status='out_for_delivery' THEN interval '15 minutes' ELSE interval '4 hours' END) LIMIT 200`,
         )
       ).rows;
       for (const s of due)

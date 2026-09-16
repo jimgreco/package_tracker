@@ -64,6 +64,7 @@ export function calendarFields(
   appOrigin: string,
   timeZone: string,
 ): CalendarFields | null {
+  if (s.dismissedAt || s.archivedAt) return null;
   let estimate = s.estimate;
   if (s.status === "delivered" && s.deliveredAt)
     estimate = {

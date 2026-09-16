@@ -37,6 +37,7 @@ import {
   dayFor,
   includesDay,
   since,
+  messageDateLabel,
 } from "@/lib/display";
 import {
   Modal,
@@ -194,9 +195,27 @@ export default function Page() {
     setAuth(true);
   }
   const today = data ? todayInZone(data.settings.timeZone) : "";
-  const all = data?.shipments || [];
+  const all = (data?.shipments || []).filter((s) => !s.dismissedAt);
+  async function quickAction(
+    s: Shipment,
+    kind: "deliver" | "dismiss" | "restore",
+  ) {
+    await action(`package:${s.id}`, async () => {
+      await api(`shipments/${s.id}/${kind}`, {});
+      if (kind === "dismiss" && selected === s.id) closeDetail();
+      await reload();
+      notify(
+        kind === "deliver"
+          ? "Marked delivered. You can set the delivery date in Edit details."
+          : kind === "dismiss"
+            ? "Package dismissed. Restore it from Dismissed anytime."
+            : "Package restored.",
+      );
+    });
+  }
   const active = all.filter((s) =>
     [
+      "ordered",
       "pre_transit",
       "in_transit",
       "out_for_delivery",
@@ -209,14 +228,20 @@ export default function Page() {
     includesDay(s, today, data!.settings.timeZone),
   );
   const delivered = all.filter((s) => s.status === "delivered");
-  const visible = all.filter(
+  const visible = (
+    filter === "Dismissed"
+      ? (data?.shipments || []).filter((s) => s.dismissedAt)
+      : all
+  ).filter(
     (s) =>
       (filter === "All packages" ||
+        filter === "Dismissed" ||
         (filter === "On the way"
           ? active.includes(s)
           : filter === "Delivered"
             ? s.status === "delivered"
-            : s.needsReview || ["failure", "delayed"].includes(s.status))) &&
+            : s.needsReview ||
+              ["failure", "delayed", "unknown"].includes(s.status))) &&
       [
         s.merchant,
         s.orderNumber,
@@ -387,6 +412,7 @@ export default function Page() {
                             "On the way",
                             "Delivered",
                             "Needs attention",
+                            "Dismissed",
                           ].map((t) => (
                             <button
                               key={t}
@@ -400,9 +426,15 @@ export default function Page() {
                         </div>
                       </div>
                       <div className="list-label">
-                        LATEST SHIPMENTS
-                        <span>{visible.length} packages · Newest first</span>
+                        {filter === "Dismissed"
+                          ? "DISMISSED PACKAGES"
+                          : "PACKAGES"}
+                        <span>{visible.length} packages</span>
                       </div>
+                      <p className="sort-explanation">
+                        Newest first by initial email date, or date added
+                        manually.
+                      </p>
                       <div className="search-box">
                         <Search size={17} />
                         <input
@@ -416,87 +448,148 @@ export default function Page() {
                       {visible.length ? (
                         <div className="shipment-list">
                           {visible.map((s) => (
-                            <button
-                              key={s.id}
-                              className={
-                                "shipment-card " +
-                                (s.status === "out_for_delivery"
-                                  ? "arriving-card"
-                                  : "")
-                              }
-                              onClick={() => select(s.id)}
-                            >
-                              <MerchantTile shipment={s} />
-                              <div className="shipment-main">
-                                <div className="shipment-heading">
-                                  <h3>{s.merchant}</h3>
-                                  <span className={"status status-" + s.status}>
-                                    {STATUS_LABEL[s.status]}
-                                  </span>
-                                  {s.needsReview && (
+                            <article className="shipment-entry" key={s.id}>
+                              <button
+                                className={
+                                  "shipment-card " +
+                                  (s.status === "out_for_delivery"
+                                    ? "arriving-card"
+                                    : "")
+                                }
+                                onClick={() => select(s.id)}
+                              >
+                                <MerchantTile shipment={s} />
+                                <div className="shipment-main">
+                                  <div className="shipment-heading">
+                                    <h3>{s.merchant}</h3>
                                     <span
-                                      className="review-indicator"
-                                      title="Needs review"
+                                      className={"status status-" + s.status}
                                     >
-                                      <AlertCircle size={14} />
+                                      {STATUS_LABEL[s.status]}
                                     </span>
-                                  )}
-                                </div>
-                                <p>
-                                  {s.items
-                                    .map(
-                                      (i) =>
-                                        i.name +
-                                        (i.quantity > 1
-                                          ? " × " + i.quantity
-                                          : ""),
-                                    )
-                                    .join(", ") || "Item details not available"}
-                                </p>
-                                <div className="shipment-meta">
-                                  <span>
-                                    {s.carrier || "Awaiting shipping details"}
-                                  </span>
-                                  {s.orderNumber && (
-                                    <span>{s.orderNumber}</span>
-                                  )}
-                                </div>
-                                {s.status === "out_for_delivery" && (
-                                  <div
-                                    className="delivery-progress"
-                                    aria-label="Out for delivery"
-                                  >
-                                    <span />
-                                    <span />
-                                    <span />
-                                    <span className="unfinished" />
+                                    {s.needsReview && (
+                                      <span
+                                        className="review-indicator"
+                                        title="Needs review"
+                                      >
+                                        <AlertCircle size={14} />
+                                      </span>
+                                    )}
                                   </div>
-                                )}
-                              </div>
-                              <div className="shipment-eta">
-                                <span>
-                                  {s.status === "delivered"
-                                    ? "Delivered"
-                                    : "Expected delivery"}
-                                </span>
-                                <strong>
-                                  {s.status === "delivered" && s.deliveredAt
-                                    ? dateLabel(
-                                        dayFor(s, data.settings.timeZone)!,
+                                  <p>
+                                    {s.items
+                                      .map(
+                                        (i) =>
+                                          i.name +
+                                          (i.quantity > 1
+                                            ? " × " + i.quantity
+                                            : ""),
                                       )
-                                    : s.estimate?.start.slice(0, 10) ===
-                                          today &&
-                                        s.estimate.kind !== "date_range"
-                                      ? "Today"
-                                      : estimateLabel(s.estimate)}
-                                </strong>
-                                {s.status !== "delivered" &&
-                                  estimateTime(s.estimate) && (
-                                    <small>{estimateTime(s.estimate)}</small>
+                                      .join(", ") ||
+                                      "Item details not available"}
+                                  </p>
+                                  <div className="shipment-meta">
+                                    <span>
+                                      {s.carrier || "Awaiting shipping details"}
+                                    </span>
+                                    {s.orderNumber && (
+                                      <span>{s.orderNumber}</span>
+                                    )}
+                                  </div>
+                                  {s.status === "out_for_delivery" && (
+                                    <div
+                                      className="delivery-progress"
+                                      aria-label="Out for delivery"
+                                    >
+                                      <span />
+                                      <span />
+                                      <span />
+                                      <span className="unfinished" />
+                                    </div>
                                   )}
+                                </div>
+                                <div className="shipment-eta">
+                                  <span>
+                                    {s.status === "delivered"
+                                      ? "Delivered"
+                                      : "Expected delivery"}
+                                  </span>
+                                  <strong>
+                                    {s.status === "delivered"
+                                      ? s.deliveredAt
+                                        ? dateLabel(
+                                            dayFor(s, data.settings.timeZone)!,
+                                          )
+                                        : "Date not specified"
+                                      : s.estimate?.start.slice(0, 10) ===
+                                            today &&
+                                          s.estimate.kind !== "date_range"
+                                        ? "Today"
+                                        : estimateLabel(s.estimate)}
+                                  </strong>
+                                  {s.status !== "delivered" &&
+                                    estimateTime(s.estimate) && (
+                                      <small>{estimateTime(s.estimate)}</small>
+                                    )}
+                                </div>
+                                <ChevronRight
+                                  className="card-arrow"
+                                  size={19}
+                                />
+                              </button>
+                              <div className="package-quick-actions">
+                                <span>
+                                  {s.firstEmailAt &&
+                                  s.firstEmailAt <= s.createdAt
+                                    ? "First email"
+                                    : "Added"}{" "}
+                                  {messageDateLabel(
+                                    s.timelineAt,
+                                    data.settings.timeZone,
+                                  )}
+                                </span>
+                                <div>
+                                  {s.dismissedAt ? (
+                                    <button
+                                      className="subtle-button"
+                                      disabled={busy === `package:${s.id}`}
+                                      onClick={() => quickAction(s, "restore")}
+                                    >
+                                      Restore
+                                    </button>
+                                  ) : (
+                                    <>
+                                      {![
+                                        "delivered",
+                                        "cancelled",
+                                        "return_to_sender",
+                                      ].includes(s.status) && (
+                                        <button
+                                          className="subtle-button"
+                                          disabled={busy === `package:${s.id}`}
+                                          onClick={() =>
+                                            quickAction(s, "deliver")
+                                          }
+                                        >
+                                          <Check size={14} />
+                                          Mark delivered
+                                        </button>
+                                      )}
+                                      <button
+                                        className="subtle-button"
+                                        disabled={busy === `package:${s.id}`}
+                                        onClick={() =>
+                                          quickAction(s, "dismiss")
+                                        }
+                                      >
+                                        <X size={14} />
+                                        Dismiss
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
                               </div>
-                              <ChevronRight className="card-arrow" size={19} />
-                            </button>
+                            </article>
                           ))}
                         </div>
                       ) : (
@@ -678,7 +771,7 @@ export default function Page() {
                 </>
               ) : view === "calendar" ? (
                 <CalendarView
-                  data={data}
+                  data={{ ...data, shipments: all }}
                   select={select}
                   busy={busy === "google"}
                   connect={() =>
@@ -690,6 +783,7 @@ export default function Page() {
               ) : view === "inbox" ? (
                 <InboxView
                   emails={data.emails}
+                  timeZone={data.settings.timeZone}
                   open={openEmail}
                   paste={() => setPaste(true)}
                 />
@@ -817,9 +911,12 @@ export default function Page() {
                     : "Expected delivery"}
                 </span>
                 <strong>
-                  {detail.shipment.status === "delivered" &&
-                  detail.shipment.deliveredAt
-                    ? dateLabel(detail.shipment.deliveredAt)
+                  {detail.shipment.status === "delivered"
+                    ? detail.shipment.deliveredAt
+                      ? dateLabel(
+                          dayFor(detail.shipment, data!.settings.timeZone)!,
+                        )
+                      : "Date not specified"
                     : estimateLabel(detail.shipment.estimate)}
                 </strong>
                 <p>{estimateTime(detail.shipment.estimate)}</p>
@@ -910,6 +1007,37 @@ export default function Page() {
                 </div>
               )}
               <div className="button-row detail-actions">
+                {detail.shipment.dismissedAt ? (
+                  <button
+                    className="secondary"
+                    disabled={busy === `package:${detail.shipment.id}`}
+                    onClick={() => quickAction(detail.shipment, "restore")}
+                  >
+                    Restore package
+                  </button>
+                ) : (
+                  <>
+                    {!["delivered", "cancelled", "return_to_sender"].includes(
+                      detail.shipment.status,
+                    ) && (
+                      <button
+                        className="secondary"
+                        disabled={busy === `package:${detail.shipment.id}`}
+                        onClick={() => quickAction(detail.shipment, "deliver")}
+                      >
+                        <Check size={16} />
+                        Mark delivered
+                      </button>
+                    )}
+                    <button
+                      className="secondary"
+                      disabled={busy === `package:${detail.shipment.id}`}
+                      onClick={() => quickAction(detail.shipment, "dismiss")}
+                    >
+                      Dismiss package
+                    </button>
+                  </>
+                )}
                 <button
                   className="primary"
                   onClick={() => setForm(detail.shipment)}
@@ -1137,8 +1265,16 @@ export default function Page() {
         <Modal title="Source email" onClose={() => setEmail(null)} wide>
           <div className="form-body">
             <h3>{email.subject}</h3>
+            <p className="quiet">{email.from}</p>
             <p className="quiet">
-              {email.from} · {new Date(email.receivedAt).toLocaleString()}
+              {email.sentAt
+                ? `Email sent ${new Date(email.sentAt).toLocaleString("en-US", { timeZone: data?.settings.timeZone })}`
+                : "Original sent date unavailable"}
+              <br />
+              Imported into Doorstep{" "}
+              {new Date(email.receivedAt).toLocaleString("en-US", {
+                timeZone: data?.settings.timeZone,
+              })}
             </p>
             {email.error && <div className="form-error">{email.error}</div>}
             <pre className="email-text">{email.text}</pre>

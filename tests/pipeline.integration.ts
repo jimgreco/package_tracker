@@ -10,7 +10,14 @@ import { pool, query, enqueue } from "../lib/db";
 import { receiveEmail, applyExtraction, extractEmail } from "../lib/email";
 import type { Extracted } from "../lib/validation";
 import type { Context } from "../lib/auth";
-import { saveManual, shipments } from "../lib/shipments";
+import {
+  saveManual,
+  shipments,
+  emails,
+  shipment,
+  quickShipmentAction,
+} from "../lib/shipments";
+import { calendarFields } from "../lib/calendar";
 import { applyTracker } from "../lib/tracking";
 import { claimJob, runOne } from "../lib/jobs";
 import { encrypt, randomToken } from "../lib/security";
@@ -48,6 +55,7 @@ before(async () => {
     "004_google_only_households.sql",
     "005_calendar_household_state.sql",
     "006_gmail.sql",
+    "007_dismissed.sql",
   ])
     await query(await readFile("db/" + file, "utf8"));
   const [h] = await query(
@@ -102,6 +110,7 @@ function extraction(
         items: items.map((name) => ({ name, quantity: 1, imageUrl: null })),
         shipments: [
           {
+            physicalDelivery: true,
             items: items.map((name) => ({ name, quantity: 1, imageUrl: null })),
             carrier: track ? "UPS" : null,
             trackingNumber: track,
@@ -422,6 +431,15 @@ test("Google calendar updates reuse one event and remove an event with no estima
     writes.filter((w) => w.method === "POST").at(-1)!.body.id,
     "ds" + s.id.replaceAll("-", "") + "a",
   );
+  await quickShipmentAction(s.id, ctx, "dismiss");
+  await syncShipment(s.id);
+  assert.equal(writes.filter((w) => w.method === "DELETE").length, 2);
+  await quickShipmentAction(s.id, ctx, "restore");
+  await syncShipment(s.id);
+  assert.equal(
+    writes.filter((w) => w.method === "POST").at(-1)!.body.id,
+    "ds" + s.id.replaceAll("-", "") + "aa",
+  );
   globalThis.fetch = async () => {
     throw new Error("Unexpected external call.");
   };
@@ -607,4 +625,201 @@ test("inline email product images persist and remain household-private", async (
     (s) => s.trackingNumber === "TRACKIMAGE",
   )!;
   assert.equal(saved.items[0].imageUrl, imageUrl);
+});
+
+test("package and inbox chronology use the original email date, with a stable manual fallback", async () => {
+  const beforeIds = new Set(
+    (await shipments(ctx.householdId)).map((s) => s.id),
+  );
+  const ids: string[] = [];
+  for (const [key, date] of [
+    ["newer", "2026-08-20T13:00:00Z"],
+    ["older", "2026-08-01T13:00:00Z"],
+  ]) {
+    const e = await receiveEmail(ctx.householdId, {
+      messageId: `chronology:${key}`,
+      from: "shop@example.invalid",
+      subject: key,
+      text: "Your shoes order was placed.",
+      html: "",
+      sentAt: date,
+    });
+    ids.push(e.id);
+    const out = extraction(null, "ordered");
+    out.orders[0].orderNumber = `chronology:${key}`;
+    await applyExtraction(e.id, out);
+  }
+  const created = (await shipments(ctx.householdId)).filter(
+    (s) => !beforeIds.has(s.id),
+  );
+  assert.deepEqual(
+    created.map((s) => s.orderNumber),
+    ["chronology:newer", "chronology:older"],
+  );
+  assert.equal(created[0].timelineAt, "2026-08-20T13:00:00.000Z");
+  await query(
+    "UPDATE shipments SET shipped_at=now(),updated_at=now() WHERE id=$1",
+    [created[1].id],
+  );
+  assert.deepEqual(
+    (await shipments(ctx.householdId))
+      .filter((s) => !beforeIds.has(s.id))
+      .map((s) => s.id),
+    created.map((s) => s.id),
+  );
+  const inbox = (await emails(ctx.householdId)).filter((e) =>
+    ids.includes(e.id),
+  );
+  assert.deepEqual(
+    inbox.map((e) => e.subject),
+    ["newer", "older"],
+  );
+  assert.equal(inbox[1].sentAt, "2026-08-01T13:00:00.000Z");
+  assert.notEqual(inbox[1].receivedAt, inbox[1].sentAt);
+  // Manually created before the first linked email: retain the creation date.
+  await query(
+    "UPDATE shipments SET created_at='2026-07-01T12:00:00Z' WHERE id=$1",
+    [created[0].id],
+  );
+  assert.equal(
+    (await shipments(ctx.householdId)).find((s) => s.id === created[0].id)!
+      .timelineAt,
+    "2026-07-01T12:00:00.000Z",
+  );
+});
+
+test("nonphysical receipts are ignored even if the model labels the overall email relevant", async () => {
+  const before = (await shipments(ctx.householdId)).length;
+  for (const name of [
+    "iCloud+",
+    "Google Health Premium",
+    "Google Home Premium",
+    "iTunes movie",
+    "Movie e-ticket",
+    "Schedule K-1 online package",
+    "Flight booking",
+  ]) {
+    const e = await incoming(`nonphysical:${name}`, name);
+    const out = extraction(null, "ordered", "2026-09-20", [name]);
+    out.orders[0].orderNumber = `nonphysical:${name}`;
+    out.orders[0].shipments[0].physicalDelivery = false;
+    await applyExtraction(e.id, out);
+    assert.equal(
+      (await query("SELECT status FROM source_emails WHERE id=$1", [e.id]))[0]
+        .status,
+      "ignored",
+    );
+    assert.ok(!(await emails(ctx.householdId)).some((x) => x.id === e.id));
+  }
+  assert.equal((await shipments(ctx.householdId)).length, before);
+  const e = await incoming(
+    "mixed-physical",
+    "Apple device will ship soon. iCloud subscription also renewed.",
+  );
+  const out = extraction(null, "ordered", "2026-09-20", ["Apple device"]);
+  out.orders[0].orderNumber = "mixed-physical";
+  const digital = structuredClone(out.orders[0]);
+  digital.orderNumber = "mixed-digital";
+  digital.shipments[0].physicalDelivery = false;
+  out.orders.push(digital);
+  await applyExtraction(e.id, out);
+  assert.equal((await shipments(ctx.householdId)).length, before + 1);
+  assert.ok(
+    (await shipments(ctx.householdId)).some(
+      (s) => s.orderNumber === "mixed-physical" && !s.trackingNumber,
+    ),
+  );
+  assert.ok(
+    !(await shipments(ctx.householdId)).some(
+      (s) => s.orderNumber === "mixed-digital",
+    ),
+  );
+});
+
+test("quick actions are household scoped, idempotent, reversible and protect confirmed delivery", async () => {
+  const e = await incoming("quick-actions");
+  const out = extraction("TRACK200");
+  out.orders[0].orderNumber = "quick-actions";
+  // Use an isolated shipment with a source-backed unique tracking number.
+  await query(
+    "UPDATE source_emails SET body_text=body_text||' TRACKQUICK' WHERE id=$1",
+    [e.id],
+  );
+  out.orders[0].shipments[0].trackingNumber = "TRACKQUICK";
+  await applyExtraction(e.id, out);
+  const s = (await shipments(ctx.householdId)).find(
+    (s) => s.trackingNumber === "TRACKQUICK",
+  )!;
+  await assert.rejects(
+    quickShipmentAction(s.id, { ...ctx, householdId: randomUUID() }, "dismiss"),
+    /not found/,
+  );
+  await Promise.all([
+    quickShipmentAction(s.id, ctx, "dismiss"),
+    quickShipmentAction(s.id, ctx, "dismiss"),
+  ]);
+  assert.ok(!(await shipments(ctx.householdId)).some((x) => x.id === s.id));
+  const dismissed = (await shipments(ctx.householdId, false, true)).find(
+    (x) => x.id === s.id,
+  )!;
+  assert.ok(dismissed.dismissedAt);
+  assert.equal(dismissed.status, s.status);
+  assert.equal(
+    calendarFields(dismissed, "https://example.invalid", ctx.timeZone),
+    null,
+  );
+  assert.equal(
+    (
+      await query(
+        "SELECT count(*)::int n FROM tracking_events WHERE shipment_id=$1 AND event_key LIKE 'manual:dismiss:%'",
+        [s.id],
+      )
+    )[0].n,
+    1,
+  );
+  await query("UPDATE shipments SET tracker_id='trk_quick' WHERE id=$1", [
+    s.id,
+  ]);
+  await applyTracker(s.id, {
+    id: "trk_quick",
+    tracking_code: "TRACKQUICK",
+    status: "delivered",
+    updated_at: "2026-10-01T12:00:00Z",
+    tracking_details: [],
+  });
+  assert.equal((await shipment(s.id)).shipment.status, s.status);
+  const later = await incoming(
+    "quick-later",
+    "TRACKQUICK Your package is on the way.",
+  );
+  const update = extraction("TRACKQUICK");
+  update.orders[0].orderNumber = "quick-actions";
+  await applyExtraction(later.id, update);
+  assert.ok(!(await shipments(ctx.householdId)).some((x) => x.id === s.id));
+  await quickShipmentAction(s.id, ctx, "restore");
+  assert.ok((await shipments(ctx.householdId)).some((x) => x.id === s.id));
+  await Promise.all([
+    quickShipmentAction(s.id, ctx, "deliver"),
+    quickShipmentAction(s.id, ctx, "deliver"),
+  ]);
+  await applyTracker(s.id, {
+    id: "trk_quick",
+    tracking_code: "TRACKQUICK",
+    status: "in_transit",
+    updated_at: "2027-01-01T12:00:00Z",
+    tracking_details: [],
+  });
+  const confirmed = (await shipment(s.id)).shipment;
+  assert.equal(confirmed.status, "delivered");
+  assert.equal(confirmed.manualOverride, true);
+  assert.equal(confirmed.deliveredAt, null);
+  assert.equal(
+    (
+      await query(
+        "SELECT count(*)::int n FROM tracking_events WHERE shipment_id=$1 AND event_key LIKE 'manual:deliver:%'",
+        [s.id],
+      )
+    )[0].n,
+    1,
+  );
 });

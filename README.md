@@ -194,6 +194,14 @@ Live acceptance still requires real accounts and representative emails:
 4. Connect Google; confirm a timed window and an all-day range in the dedicated calendar.
 5. Change an ETA; confirm the existing Google event moves and that it appears correctly in Apple Calendar after sync.
 
+## Package list and inbox
+
+Packages sort newest first by their earliest source-email sent date (falling back to import time); manual packages use creation time. Later tracking updates do not move packages to the top. The inbox shows **Sent** dates in the household time zone and distinguishes the Doorstep import time in email details.
+
+**Mark delivered** confirms receipt without inventing a delivery date; edit details to supply one. **Dismiss** hides a package from active lists and calendars and stops tracking checks. Restore it from **Dismissed**. Nonphysical receipts are ignored by extraction and hidden from the shipping inbox while source records remain stored. Physical orders without tracking and recurring physical deliveries remain eligible.
+
+An optional live extraction regression check uses synthetic emails and makes no database changes: `node --import tsx scripts/eval-extraction.ts`, with OpenAI credentials supplied privately in the environment. This calls the configured model and is intentionally separate from the mocked test suite.
+
 ## Key files
 
 - `app/page.tsx`, `app/components.tsx`, `app/views.tsx`, `app/globals.css`: application UI.

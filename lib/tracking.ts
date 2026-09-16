@@ -70,7 +70,7 @@ export function trackerStatus(status: string, detail?: string | null): Status {
 }
 export async function registerTracking(id: string) {
   const { shipment: s, row } = await shipment(id);
-  if (s.isDemo) return;
+  if (s.isDemo || s.dismissedAt || s.archivedAt) return;
   if (!s.trackingNumber) return;
   if (!process.env.EASYPOST_API_KEY) {
     await query(
@@ -114,7 +114,7 @@ export async function registerTracking(id: string) {
 }
 export async function refreshTracking(id: string) {
   const { shipment: s, row } = await shipment(id);
-  if (s.isDemo) return;
+  if (s.isDemo || s.dismissedAt || s.archivedAt) return;
   if (!row.tracker_id) return registerTracking(id);
   try {
     await applyTracker(
@@ -153,7 +153,14 @@ export async function applyTracker(id: string, tracker: Tracker) {
         [id],
       )
     ).rows;
-    if (!s || s.is_demo || s.tracker_id !== tracker.id) return;
+    if (
+      !s ||
+      s.is_demo ||
+      s.dismissed_at ||
+      s.archived_at ||
+      s.tracker_id !== tracker.id
+    )
+      return;
     const history = [...tracker.tracking_details]
       .filter((d) => Number.isFinite(Date.parse(d.datetime)))
       .sort((a, b) => Date.parse(a.datetime) - Date.parse(b.datetime));

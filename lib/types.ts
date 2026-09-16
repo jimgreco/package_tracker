@@ -48,6 +48,10 @@ export type Shipment = {
   estimate: Estimate | null;
   deliveredAt: string | null;
   createdAt: string;
+  timelineAt: string;
+  firstEmailAt: string | null;
+  dismissedAt: string | null;
+  archivedAt: string | null;
   updatedAt: string;
   statusAt: string;
   lastCheckedAt: string | null;
@@ -71,6 +75,7 @@ export type Email = {
   subject: string;
   from: string;
   receivedAt: string;
+  sentAt: string | null;
   status: string;
   error: string | null;
   text?: string;

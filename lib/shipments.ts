@@ -29,6 +29,10 @@ export function mapShipment(r: Record<string, unknown>): Shipment {
     estimate: r.estimate as Shipment["estimate"],
     deliveredAt: iso(r.delivered_at),
     createdAt: iso(r.created_at)!,
+    timelineAt: iso(r.timeline_at || r.created_at)!,
+    firstEmailAt: iso(r.first_email_at),
+    dismissedAt: iso(r.dismissed_at),
+    archivedAt: iso(r.archived_at),
     updatedAt: iso(r.updated_at)!,
     statusAt: iso(r.status_at)!,
     lastCheckedAt: iso(r.last_checked_at),
@@ -39,11 +43,22 @@ export function mapShipment(r: Record<string, unknown>): Shipment {
     isDemo: r.is_demo as boolean,
   };
 }
-export async function shipments(householdId: string, includeArchived = false) {
+export async function shipments(
+  householdId: string,
+  includeArchived = false,
+  includeDismissed = false,
+) {
   return (
     await query(
-      "SELECT s.*,o.merchant,o.order_number,o.ordered_at FROM shipments s JOIN orders o ON o.id=s.order_id WHERE s.household_id=$1 AND ($2 OR s.archived_at IS NULL) ORDER BY coalesce(s.shipped_at,s.created_at) DESC",
-      [householdId, includeArchived],
+      `SELECT s.*,o.merchant,o.order_number,o.ordered_at,source.first_email_at,
+       least(s.created_at,coalesce(source.first_email_at,s.created_at)) AS timeline_at
+       FROM shipments s JOIN orders o ON o.id=s.order_id
+       LEFT JOIN LATERAL (SELECT min(coalesce(e.sent_at,e.received_at)) AS first_email_at
+         FROM shipment_emails se JOIN source_emails e ON e.id=se.email_id
+         WHERE se.shipment_id=s.id AND e.household_id=s.household_id) source ON true
+       WHERE s.household_id=$1 AND ($2 OR s.archived_at IS NULL) AND ($3 OR s.dismissed_at IS NULL)
+       ORDER BY timeline_at DESC,s.created_at DESC,s.id DESC`,
+      [householdId, includeArchived, includeDismissed],
     )
   ).map(mapShipment);
 }
@@ -134,7 +149,7 @@ export async function settings(ctx: Context): Promise<Settings> {
 }
 export async function emails(householdId: string): Promise<Email[]> {
   const rows = await query(
-    "SELECT id,subject,sender,received_at,status,error FROM source_emails WHERE household_id=$1 ORDER BY received_at DESC LIMIT 100",
+    "SELECT id,subject,sender,sent_at,received_at,status,error FROM source_emails WHERE household_id=$1 AND status<>'ignored' ORDER BY coalesce(sent_at,received_at) DESC,id DESC LIMIT 100",
     [householdId],
   );
   return rows.map((r) => ({
@@ -142,13 +157,14 @@ export async function emails(householdId: string): Promise<Email[]> {
     subject: r.subject,
     from: r.sender,
     receivedAt: iso(r.received_at)!,
+    sentAt: iso(r.sent_at),
     status: r.status,
     error: r.error,
   }));
 }
 export async function dashboard(ctx: Context): Promise<DashboardData> {
   const [s, e, settingsData] = await Promise.all([
-    shipments(ctx.householdId),
+    shipments(ctx.householdId, false, true),
     emails(ctx.householdId),
     settings(ctx),
   ]);
@@ -169,7 +185,7 @@ export async function detail(id: string, ctx: Context) {
     source: r.source,
   }));
   const sources = await query(
-    "SELECT e.id,e.subject,e.sender,e.body_text,e.received_at,e.extraction FROM source_emails e JOIN shipment_emails se ON se.email_id=e.id WHERE se.shipment_id=$1 ORDER BY received_at DESC",
+    "SELECT e.id,e.subject,e.sender,e.body_text,e.sent_at,e.received_at,e.extraction FROM source_emails e JOIN shipment_emails se ON se.email_id=e.id WHERE se.shipment_id=$1 ORDER BY coalesce(e.sent_at,e.received_at) DESC,e.id DESC",
     [id],
   );
   return {
@@ -181,9 +197,83 @@ export async function detail(id: string, ctx: Context) {
       from: r.sender,
       text: r.body_text,
       receivedAt: iso(r.received_at)!,
+      sentAt: iso(r.sent_at),
       extraction: r.extraction,
     })),
   };
+}
+export async function quickShipmentAction(
+  id: string,
+  ctx: Context,
+  action: "deliver" | "dismiss" | "restore",
+) {
+  return transaction(async (c) => {
+    await c.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+      ctx.householdId,
+    ]);
+    const [existing] = (
+      await c.query(
+        "SELECT * FROM shipments WHERE id=$1 AND household_id=$2 AND archived_at IS NULL FOR UPDATE",
+        [id, ctx.householdId],
+      )
+    ).rows;
+    if (!existing) throw new AppError("Package not found.", 404);
+    if (
+      (action === "dismiss" && existing.dismissed_at) ||
+      (action === "restore" && !existing.dismissed_at) ||
+      (action === "deliver" && existing.status === "delivered")
+    )
+      return;
+    if (
+      action === "deliver" &&
+      (existing.dismissed_at ||
+        ["cancelled", "return_to_sender"].includes(existing.status))
+    )
+      throw new AppError(
+        "Restore or edit this package before marking it delivered.",
+      );
+    const [saved] = (
+      await c.query(
+        action === "deliver"
+          ? "UPDATE shipments SET status='delivered',status_at=now(),manual_override=true,updated_at=now(),version=version+1 WHERE id=$1 RETURNING *"
+          : `UPDATE shipments SET dismissed_at=${action === "dismiss" ? "now()" : "NULL"},updated_at=now(),version=version+1 WHERE id=$1 RETURNING *`,
+        [id],
+      )
+    ).rows;
+    // A quick confirmation does not assert that delivery happened today.
+    await c.query(
+      "INSERT INTO tracking_events(shipment_id,event_key,status,message,occurred_at,source) VALUES($1,$2,$3,$4,now(),'Household')",
+      [
+        id,
+        `manual:${action}:${saved.version}`,
+        saved.status,
+        action === "deliver"
+          ? "Marked delivered by your household; delivery date not specified."
+          : action === "dismiss"
+            ? "Dismissed by your household."
+            : "Restored by your household.",
+      ],
+    );
+    if (!ctx.demo) {
+      await enqueue(
+        "google_sync",
+        { shipmentId: id, householdId: ctx.householdId },
+        `calendar:${id}:${saved.version}`,
+        c,
+      );
+      if (
+        action === "restore" &&
+        saved.tracking_number &&
+        !["delivered", "cancelled", "return_to_sender"].includes(saved.status)
+      )
+        await enqueue(
+          saved.tracker_id ? "track_refresh" : "track_register",
+          { shipmentId: id, householdId: ctx.householdId },
+          `restore:${id}:${saved.version}`,
+          c,
+        );
+    }
+  });
 }
 export async function saveManual(input: unknown, ctx: Context, id?: string) {
   const v = manualSchema.parse(input);
