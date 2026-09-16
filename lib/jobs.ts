@@ -9,6 +9,8 @@ import {
 import { syncShipment, syncAll } from "./google";
 import { gmailConfigured, syncGmail } from "./gmail";
 import { randomUUID } from "node:crypto";
+import { fedexConfigured } from "./tracking-config";
+import { fedexCarrierPattern } from "./tracking-identity";
 type Job = {
   id: string;
   kind: string;
@@ -100,10 +102,11 @@ export async function schedule() {
     await c.query(
       "INSERT INTO service_health(name,last_seen_at) VALUES('worker',now()) ON CONFLICT(name) DO UPDATE SET last_seen_at=now()",
     );
-    if (process.env.EASYPOST_API_KEY) {
+    if (process.env.EASYPOST_API_KEY || fedexConfigured()) {
       const due = (
         await c.query(
-          `SELECT id,household_id,tracker_id FROM shipments WHERE is_demo=false AND archived_at IS NULL AND dismissed_at IS NULL AND tracking_number IS NOT NULL AND status NOT IN ('delivered','cancelled','return_to_sender') AND tracking_state<>'unsupported' AND (last_checked_at IS NULL OR last_checked_at<now()-CASE WHEN status='out_for_delivery' THEN interval '15 minutes' ELSE interval '4 hours' END) LIMIT 200`,
+          `SELECT id,household_id,tracker_id FROM shipments WHERE is_demo=false AND archived_at IS NULL AND dismissed_at IS NULL AND tracking_number IS NOT NULL AND ($1::boolean OR trim(carrier) ~* $2) AND status NOT IN ('delivered','cancelled','return_to_sender') AND tracking_state<>'unsupported' AND (last_checked_at IS NULL OR last_checked_at<now()-CASE WHEN status='out_for_delivery' THEN interval '15 minutes' ELSE interval '4 hours' END) ORDER BY last_checked_at ASC NULLS FIRST LIMIT 200`,
+          [!!process.env.EASYPOST_API_KEY, fedexCarrierPattern.source],
         )
       ).rows;
       for (const s of due)

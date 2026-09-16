@@ -11,6 +11,7 @@ import { AppError, origin, safeUrl } from "./security";
 import { manualSchema } from "./validation";
 import { normalizeEstimate, validZone } from "./calendar";
 import { gmailAvailable } from "./gmail";
+import { trackingConfigured } from "./tracking-config";
 const iso = (d: unknown) =>
   d instanceof Date ? d.toISOString() : typeof d === "string" ? d : null;
 export function mapShipment(r: Record<string, unknown>): Shipment {
@@ -354,7 +355,7 @@ export async function saveManual(input: unknown, ctx: Context, id?: string) {
     const state = v.trackingNumber
       ? ctx.demo
         ? "none"
-        : process.env.EASYPOST_API_KEY
+        : trackingConfigured(v.carrier)
           ? "pending"
           : "unconfigured"
       : "none";

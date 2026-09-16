@@ -48,6 +48,8 @@ before(async () => {
     GMAIL_ENABLED: "true",
   });
   delete process.env.EASYPOST_API_KEY;
+  delete process.env.FEDEX_CLIENT_ID;
+  delete process.env.FEDEX_CLIENT_SECRET;
   for (const file of (await readdir("db"))
     .filter((f) => f.endsWith(".sql"))
     .sort())

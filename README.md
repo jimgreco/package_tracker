@@ -94,6 +94,15 @@ This implementation uses EasyPost's documented **Basic authentication** option, 
 - [Track existing shipments](https://docs.easypost.com/guides/tracking-guide)
 - [Webhook authentication](https://docs.easypost.com/guides/webhooks-guide)
 
+#### Direct FedEx tracking
+
+FedEx packages use the official Basic Integrated Visibility API when `FEDEX_CLIENT_ID` and `FEDEX_CLIENT_SECRET` are set. Create a project in the [FedEx Developer Portal](https://developer.fedex.com/), enable Basic Integrated Visibility, and activate its production credentials. Put those values in the private server `doorstep.env`; never commit them. The adapter uses production endpoints only and does not purchase labels or subscribe to paid webhook services.
+
+Restart both web and worker after changing credentials. Use Refresh on existing FedEx packages to retry previous EasyPost failures. New FedEx packages use the direct API automatically. The worker checks active packages every four hours, or every 15 minutes when out for delivery, and stops scheduled checks for terminal, dismissed, or archived packages. OAuth tokens are cached and renewed automatically. Delivery windows retain the household destination time zone; date-only estimates remain all-day events. Other carriers continue through EasyPost.
+
+- [FedEx tracking API](https://developer.fedex.com/api/en-us/catalog/track/v1/docs.html)
+- [FedEx authentication](https://developer.fedex.com/api/en-us/catalog/authorization/v1/docs.html)
+
 ### 4. Google sign-in and Calendar
 
 1. Create a Google Cloud project, enable the Calendar API, configure the OAuth consent screen, and create a **Web application** OAuth client.

@@ -25,6 +25,7 @@ import {
 import { calendarFeed } from "@/lib/calendar";
 import { postmarkSchema, receiveEmail } from "@/lib/email";
 import { trackingWebhook } from "@/lib/tracking";
+import { trackingConfigured } from "@/lib/tracking-config";
 import { googleStart, googleCallback, disconnectGoogle } from "@/lib/google";
 import {
   googleSigninStart,
@@ -243,9 +244,9 @@ async function handle(
         await rateLimit(`refresh:${id}`, 4, 3600);
         if (!row.tracking_number)
           throw new AppError("Add a tracking number first.");
-        if (!process.env.EASYPOST_API_KEY)
+        if (!trackingConfigured(row.carrier))
           throw new AppError(
-            "Connect EasyPost before refreshing tracking.",
+            "Tracking is not configured for this carrier.",
             503,
           );
         await enqueue(

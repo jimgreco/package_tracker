@@ -1,8 +1,9 @@
+export const fedexCarrierPattern =
+  /^fedex(?:\s+(?:ground|express|home delivery))?$/i;
+
 export function trackingCarrier(carrier: string | null) {
   const value = carrier?.trim() || null;
-  return value && /^fedex(?:\s+(?:ground|express|home delivery))?$/i.test(value)
-    ? "FedEx"
-    : value;
+  return value && fedexCarrierPattern.test(value) ? "FedEx" : value;
 }
 
 // Amazon's order-page shipmentId identifies a retailer package, not a carrier tracker.

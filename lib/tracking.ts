@@ -1,10 +1,13 @@
 import { z } from "zod";
+import { isDeepStrictEqual } from "node:util";
 import { query, transaction, enqueue } from "./db";
 import { shipment } from "./shipments";
 import { AppError, hash } from "./security";
 import type { Estimate, Status } from "./types";
 import { STATUSES } from "./types";
 import { trackingCarrier } from "./tracking-identity";
+import { fedexConfigured, isFedex } from "./tracking-config";
+import { fetchFedex } from "./fedex";
 export const trackerSchema = z.object({
   id: z.string().startsWith("trk_"),
   tracking_code: z.string(),
@@ -73,6 +76,7 @@ export async function registerTracking(id: string) {
   const { shipment: s, row } = await shipment(id);
   if (s.isDemo || s.dismissedAt || s.archivedAt) return;
   if (!s.trackingNumber) return;
+  if (isFedex(s.carrier) && fedexConfigured()) return refreshFedex(id);
   if (!process.env.EASYPOST_API_KEY) {
     await query(
       "UPDATE shipments SET tracking_state='unconfigured' WHERE id=$1",
@@ -116,6 +120,14 @@ export async function registerTracking(id: string) {
 export async function refreshTracking(id: string) {
   const { shipment: s, row } = await shipment(id);
   if (s.isDemo || s.dismissedAt || s.archivedAt) return;
+  if (isFedex(s.carrier) && fedexConfigured()) return refreshFedex(id);
+  if (row.tracker_id?.startsWith("fedex:")) {
+    await query(
+      "UPDATE shipments SET tracking_state='unconfigured',tracking_error='Direct FedEx tracking is not configured.' WHERE id=$1",
+      [id],
+    );
+    return;
+  }
   if (!row.tracker_id) return registerTracking(id);
   try {
     await applyTracker(
@@ -146,7 +158,45 @@ export function carrierEstimate(t: Tracker, timeZone: string): Estimate | null {
     label: "Estimated by the carrier",
   };
 }
-export async function applyTracker(id: string, tracker: Tracker) {
+async function refreshFedex(id: string) {
+  const { shipment: s, row } = await shipment(id);
+  if (s.isDemo || s.dismissedAt || s.archivedAt || !s.trackingNumber) return;
+  try {
+    const result = await fetchFedex(s.trackingNumber, row.time_zone);
+    const updated = await query(
+      "UPDATE shipments SET tracker_id=$2 WHERE id=$1 AND tracking_number=$3 AND carrier IS NOT DISTINCT FROM $4 AND dismissed_at IS NULL AND archived_at IS NULL RETURNING id",
+      [id, result.tracker.id, s.trackingNumber, s.carrier],
+    );
+    if (updated.length) await applyTracker(id, result.tracker, result);
+  } catch (e) {
+    const unsupported = e instanceof AppError && e.status === 422;
+    await query(
+      "UPDATE shipments SET tracking_state=$2,tracking_error=$3,last_checked_at=now() WHERE id=$1 AND tracking_number=$4 AND carrier IS NOT DISTINCT FROM $5",
+      [
+        id,
+        unsupported ? "unsupported" : "error",
+        e instanceof AppError
+          ? e.message
+          : "FedEx tracking could not be refreshed. We will retry.",
+        s.trackingNumber,
+        s.carrier,
+      ],
+    );
+    if (!unsupported)
+      throw new AppError(
+        e instanceof AppError
+          ? e.message
+          : "FedEx tracking could not be refreshed. We will retry.",
+        503,
+      );
+  }
+}
+
+export async function applyTracker(
+  id: string,
+  tracker: Tracker,
+  direct?: { estimate: Estimate | null; reviewReason: string | null },
+) {
   await transaction(async (c) => {
     const [s] = (
       await c.query(
@@ -162,6 +212,11 @@ export async function applyTracker(id: string, tracker: Tracker) {
       s.tracker_id !== tracker.id
     )
       return;
+    if (direct?.reviewReason)
+      await c.query(
+        "UPDATE shipments SET needs_review=true,review_reason=$2 WHERE id=$1",
+        [id, direct.reviewReason],
+      );
     const history = [...tracker.tracking_details]
       .filter((d) => Number.isFinite(Date.parse(d.datetime)))
       .sort((a, b) => Date.parse(a.datetime) - Date.parse(b.datetime));
@@ -204,13 +259,16 @@ export async function applyTracker(id: string, tracker: Tracker) {
         Date.parse(tracker.updated_at || last.datetime)
     )
       nextStatus = trackerStatus(last.status);
-    const estimate = carrierEstimate(tracker, s.time_zone);
+    const estimate = direct
+      ? direct.estimate
+      : carrierEstimate(tracker, s.time_zone);
     let merged = s.estimate as Estimate | null;
     // Retain a narrower email window when the carrier confirms that same date.
     if (
       estimate &&
       (!merged ||
-        merged.start.slice(0, 10) !== estimate.start ||
+        estimate.kind === "window" ||
+        merged.start.slice(0, 10) !== estimate.start.slice(0, 10) ||
         merged.kind === "date" ||
         merged.kind === "date_range")
     )
@@ -221,7 +279,10 @@ export async function applyTracker(id: string, tracker: Tracker) {
       s.status,
     );
     const canUpdate =
-      fresh && !s.manual_override && (!final || s.status === nextStatus);
+      fresh &&
+      !s.manual_override &&
+      !(direct && nextStatus === "unknown") &&
+      (!final || s.status === nextStatus);
     const estimateAt =
       tracker.updated_at && Number.isFinite(Date.parse(tracker.updated_at))
         ? tracker.updated_at
@@ -238,7 +299,7 @@ export async function applyTracker(id: string, tracker: Tracker) {
     const changed =
       (canUpdate &&
         (s.status !== nextStatus || (!s.delivered_at && delivered))) ||
-      (canEstimate && JSON.stringify(s.estimate) !== JSON.stringify(merged));
+      (canEstimate && !isDeepStrictEqual(s.estimate, merged));
     const [saved] = (
       await c.query(
         `UPDATE shipments SET status=CASE WHEN $2 THEN $3 ELSE status END,status_at=CASE WHEN $2 THEN $4::timestamptz ELSE status_at END,delivered_at=CASE WHEN $2 AND $3='delivered' THEN coalesce($5,delivered_at) ELSE delivered_at END,estimate=CASE WHEN $6 THEN $7::jsonb ELSE estimate END,estimate_at=CASE WHEN $6 THEN $8::timestamptz ELSE estimate_at END,last_checked_at=now(),tracking_state='active',tracking_error=NULL,version=version+CASE WHEN $9 THEN 1 ELSE 0 END,updated_at=CASE WHEN $9 THEN now() ELSE updated_at END WHERE id=$1 RETURNING *`,

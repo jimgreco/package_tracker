@@ -18,10 +18,15 @@ import {
   quickShipmentAction,
 } from "../lib/shipments";
 import { calendarFields } from "../lib/calendar";
-import { applyTracker, registerTracking } from "../lib/tracking";
-import { claimJob, runOne } from "../lib/jobs";
+import {
+  applyTracker,
+  registerTracking,
+  refreshTracking,
+} from "../lib/tracking";
+import { claimJob, runOne, schedule } from "../lib/jobs";
 import { encrypt, randomToken } from "../lib/security";
 import { syncShipment } from "../lib/google";
+import { fedexFixture } from "./fixtures/fedex";
 const originalUrl = process.env.DATABASE_URL!;
 const dbUrl = new URL(originalUrl);
 const testDb = `doorstep_test_${Date.now()}`;
@@ -44,6 +49,8 @@ before(async () => {
   uploadDir = await mkdtemp(join(tmpdir(), "doorstep-test-uploads-"));
   process.env.UPLOAD_DIR = uploadDir;
   delete process.env.EASYPOST_API_KEY;
+  delete process.env.FEDEX_CLIENT_ID;
+  delete process.env.FEDEX_CLIENT_SECRET;
   process.env.ENCRYPTION_KEY = "a".repeat(64);
   process.env.APP_URL = "http://127.0.0.1:4317";
   process.env.GOOGLE_CLIENT_ID = "fixture-google";
@@ -975,3 +982,191 @@ test("quick actions are household scoped, idempotent, reversible and protect con
     1,
   );
 });
+
+async function directFedexShipment(key: string) {
+  const email = await incoming(key, `FedEx package ${key} is on the way.`);
+  const out = extraction(key);
+  out.orders[0].orderNumber = key;
+  out.orders[0].shipments[0].carrier = "FedEx";
+  await applyExtraction(email.id, out);
+  return (
+    await query(
+      "SELECT * FROM shipments WHERE household_id=$1 AND tracking_number=$2",
+      [ctx.householdId, key],
+    )
+  )[0];
+}
+
+async function withFedex(run: () => Promise<void>) {
+  const previousFetch = globalThis.fetch;
+  const previousKey = process.env.EASYPOST_API_KEY;
+  process.env.FEDEX_CLIENT_ID = randomUUID();
+  process.env.FEDEX_CLIENT_SECRET = "fixture-secret";
+  try {
+    await run();
+  } finally {
+    globalThis.fetch = previousFetch;
+    delete process.env.FEDEX_CLIENT_ID;
+    delete process.env.FEDEX_CLIENT_SECRET;
+    if (previousKey === undefined) delete process.env.EASYPOST_API_KEY;
+    else process.env.EASYPOST_API_KEY = previousKey;
+  }
+}
+
+test("direct FedEx takes priority over EasyPost, deduplicates scans, syncs windows, and protects delivery", async () =>
+  withFedex(async () => {
+    process.env.EASYPOST_API_KEY = "fixture-easypost";
+    const row = await directFedexShipment("DIRECTFEDEX1");
+    assert.equal(row.tracking_state, "pending");
+    let code = "OD";
+    let auth = 0;
+    globalThis.fetch = async (url, init) => {
+      if (url === "https://apis.fedex.com/oauth/token") {
+        auth++;
+        return Response.json({
+          access_token: "fixture-token",
+          expires_in: 3600,
+        });
+      }
+      assert.equal(url, "https://apis.fedex.com/track/v1/trackingnumbers");
+      assert.equal(
+        JSON.parse(String(init?.body)).trackingInfo[0].trackingNumberInfo
+          .trackingNumber,
+        row.tracking_number,
+      );
+      return Response.json(fedexFixture(row.tracking_number, code));
+    };
+    await registerTracking(row.id);
+    let saved = await shipment(row.id);
+    assert.match(saved.row.tracker_id, /^fedex:/);
+    assert.equal(saved.shipment.status, "out_for_delivery");
+    assert.equal(saved.shipment.estimate?.kind, "window");
+    assert.equal(
+      calendarFields(saved.shipment, "https://example.invalid", ctx.timeZone)
+        ?.end.dateTime,
+      "2026-09-16T18:00:00Z",
+    );
+    const version = saved.row.version;
+    await refreshTracking(row.id);
+    saved = await shipment(row.id);
+    assert.equal(saved.row.version, version);
+    assert.equal(auth, 1);
+    assert.equal(
+      (
+        await query(
+          "SELECT count(*)::int n FROM tracking_events WHERE shipment_id=$1 AND source='FedEx'",
+          [row.id],
+        )
+      )[0].n,
+      1,
+    );
+    assert.equal(
+      (
+        await query("SELECT count(*)::int n FROM jobs WHERE dedupe_key=$1", [
+          `calendar:${row.id}:${version}`,
+        ])
+      )[0].n,
+      1,
+    );
+    code = "UNFAMILIAR";
+    await refreshTracking(row.id);
+    assert.equal((await shipment(row.id)).shipment.status, "out_for_delivery");
+    assert.equal((await shipment(row.id)).shipment.needsReview, true);
+    code = "DL";
+    await refreshTracking(row.id);
+    assert.equal((await shipment(row.id)).shipment.status, "delivered");
+    code = "IT";
+    await refreshTracking(row.id);
+    assert.equal((await shipment(row.id)).shipment.status, "delivered");
+    await quickShipmentAction(row.id, ctx, "deliver");
+    const before = (await shipment(row.id)).shipment;
+    await refreshTracking(row.id);
+    const after = (await shipment(row.id)).shipment;
+    assert.equal(after.status, "delivered");
+    assert.deepEqual(after.estimate, before.estimate);
+  }));
+
+test("direct FedEx ignores results for edited or dismissed packages and sanitizes errors", async () =>
+  withFedex(async () => {
+    const row = await directFedexShipment("DIRECTFEDEX2");
+    let mode = "edit";
+    globalThis.fetch = async (url) => {
+      if (String(url).endsWith("/oauth/token"))
+        return Response.json({
+          access_token: "fixture-token",
+          expires_in: 3600,
+        });
+      if (mode === "edit")
+        await query(
+          "UPDATE shipments SET tracking_number='EDITEDFEDEX2',tracker_id=NULL WHERE id=$1",
+          [row.id],
+        );
+      if (mode === "dismiss") await quickShipmentAction(row.id, ctx, "dismiss");
+      if (mode === "error")
+        return new Response("private account detail", { status: 503 });
+      if (mode === "restricted")
+        return Response.json({
+          output: {
+            completeTrackResults: [
+              {
+                trackingNumber: row.tracking_number,
+                trackResults: [
+                  { error: { code: "TRACKING.AUTHENTICATEDDELIVERY.ERROR" } },
+                ],
+              },
+            ],
+          },
+        });
+      return Response.json(fedexFixture(row.tracking_number));
+    };
+    await registerTracking(row.id);
+    assert.equal((await shipment(row.id)).row.tracker_id, null);
+    assert.equal((await shipment(row.id)).shipment.status, "in_transit");
+    await query("UPDATE shipments SET tracking_number=$2 WHERE id=$1", [
+      row.id,
+      row.tracking_number,
+    ]);
+    mode = "dismiss";
+    await registerTracking(row.id);
+    assert.equal((await shipment(row.id)).row.tracker_id, null);
+    await quickShipmentAction(row.id, ctx, "restore");
+    mode = "error";
+    await assert.rejects(
+      registerTracking(row.id),
+      /FedEx tracking request failed/,
+    );
+    assert.equal((await shipment(row.id)).shipment.trackingState, "error");
+    assert.doesNotMatch((await shipment(row.id)).row.tracking_error, /private/);
+    mode = "restricted";
+    await registerTracking(row.id);
+    assert.equal(
+      (await shipment(row.id)).shipment.trackingState,
+      "unsupported",
+    );
+    assert.equal((await shipment(row.id)).shipment.status, "in_transit");
+  }));
+
+test("FedEx-only scheduling includes due packages and skips unsupported, terminal, and dismissed ones", async () =>
+  withFedex(async () => {
+    delete process.env.EASYPOST_API_KEY;
+    const due = await directFedexShipment("DIRECTFEDEXSCHEDULE");
+    const delivered = await directFedexShipment("DIRECTFEDEXDELIVERED");
+    const dismissed = await directFedexShipment("DIRECTFEDEXDISMISSED");
+    const checked = await directFedexShipment("DIRECTFEDEXCHECKED");
+    await query("UPDATE shipments SET status='delivered' WHERE id=$1", [
+      delivered.id,
+    ]);
+    await quickShipmentAction(dismissed.id, ctx, "dismiss");
+    await query("UPDATE shipments SET last_checked_at=now() WHERE id=$1", [
+      checked.id,
+    ]);
+    await schedule();
+    await schedule();
+    const jobs = await query(
+      "SELECT j.payload->>'shipmentId' AS id, s.carrier FROM jobs j JOIN shipments s ON s.id::text=j.payload->>'shipmentId' WHERE dedupe_key LIKE 'scheduled:%'",
+    );
+    assert.equal(jobs.filter((j) => j.id === due.id).length, 1);
+    assert.ok(jobs.every((j) => j.carrier.startsWith("FedEx")));
+    for (const row of [delivered, dismissed, checked])
+      assert.ok(!jobs.some((j) => j.id === row.id));
+  }));
