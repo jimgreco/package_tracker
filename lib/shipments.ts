@@ -10,6 +10,7 @@ import type { Context } from "./auth";
 import { AppError, origin, safeUrl } from "./security";
 import { manualSchema } from "./validation";
 import { normalizeEstimate, validZone } from "./calendar";
+import { gmailAvailable } from "./gmail";
 const iso = (d: unknown) =>
   d instanceof Date ? d.toISOString() : typeof d === "string" ? d : null;
 export function mapShipment(r: Record<string, unknown>): Shipment {
@@ -73,6 +74,11 @@ export async function settings(ctx: Context): Promise<Settings> {
     "SELECT calendar_id,last_synced_at,error FROM google_connections WHERE household_id=$1",
     [ctx.householdId],
   );
+  const [gmail] = await query(
+    "SELECT g.*,h.name AS household_name FROM gmail_connections g JOIN households h ON h.id=g.household_id WHERE g.user_id=$1",
+    [ctx.userId],
+  );
+  const ownGmail = gmail?.household_id === ctx.householdId ? gmail : null;
   const [w] = await query(
     "SELECT last_seen_at FROM service_health WHERE name='worker'",
   );
@@ -97,12 +103,25 @@ export async function settings(ctx: Context): Promise<Settings> {
       google:
         !!process.env.GOOGLE_CLIENT_ID && !!process.env.GOOGLE_CLIENT_SECRET,
       storage: !!process.env.S3_BUCKET,
+      gmail: gmailAvailable(ctx),
     },
     google: {
       connected: !!g,
       calendarId: g?.calendar_id || null,
       lastSyncedAt: iso(g?.last_synced_at),
       error: g?.error || null,
+    },
+    gmail: {
+      connected: !!ownGmail,
+      email: ownGmail?.email || null,
+      enabled: !!ownGmail?.enabled,
+      needsReconnect: !!ownGmail?.needs_reconnect,
+      lastSyncedAt: iso(ownGmail?.last_synced_at),
+      importedCount: ownGmail?.imported_count || 0,
+      importing:
+        !!ownGmail && (!ownGmail.last_synced_at || !!ownGmail.page_token),
+      error: ownGmail?.error || null,
+      otherHouseholdName: gmail && !ownGmail ? gmail.household_name : null,
     },
     worker: { lastSeenAt: iso(w?.last_seen_at), failedJobs: dead?.count || 0 },
     userName: ctx.name,

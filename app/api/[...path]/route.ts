@@ -33,6 +33,12 @@ import {
 } from "@/lib/google-auth";
 import { addMember, removeMember, switchHousehold } from "@/lib/households";
 import { asset } from "@/lib/storage";
+import {
+  gmailStart,
+  gmailCallback,
+  gmailCookie,
+  gmailAction,
+} from "@/lib/gmail";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 const uuid = z.uuid();
@@ -178,7 +184,34 @@ async function handle(
         },
       );
     }
+    if (route === "gmail/callback" && method === "GET") {
+      let target: string;
+      try {
+        await gmailCallback(await context(req, false), req);
+        target = `${origin()}/?view=settings&gmail=connected`;
+      } catch (e) {
+        target = `${origin()}/?view=settings&gmailError=${encodeURIComponent(e instanceof AppError ? e.message : "Could not connect Gmail. Please try again.")}`;
+      }
+      const response = NextResponse.redirect(target);
+      response.headers.set("Set-Cookie", gmailCookie());
+      response.headers.set("Cache-Control", "no-store");
+      response.headers.set("Referrer-Policy", "no-referrer");
+      return response;
+    }
     const ctx = await context(req, route !== "google/callback");
+    if (route === "gmail/connect" && method === "POST") {
+      const result = await gmailStart(ctx, await jsonBody(req));
+      const response = json({ url: result.url });
+      response.headers.set("Set-Cookie", result.cookie);
+      return response;
+    }
+    if (path[0] === "gmail" && path.length === 2 && method === "POST") {
+      const action = z
+        .enum(["pause", "resume", "disconnect", "sync"])
+        .parse(path[1]);
+      await gmailAction(ctx, action);
+      return json({ ok: true });
+    }
     if (route === "dashboard" && method === "GET")
       return json(await dashboard(ctx));
     if (route === "shipments" && method === "POST") {

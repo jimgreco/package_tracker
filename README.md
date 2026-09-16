@@ -98,9 +98,10 @@ This implementation uses EasyPost's documented **Basic authentication** option, 
 
 1. Create a Google Cloud project, enable the Calendar API, configure the OAuth consent screen, and create a **Web application** OAuth client.
 2. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and a 64-character hexadecimal `ENCRYPTION_KEY`. The local setup generates that encryption key. Preserve it when migrating the database; losing it makes stored refresh tokens unreadable.
-3. Register **both** exact redirect URIs on that Web application client:
+3. Register the exact redirect URIs on that Web application client:
    - Sign-in: `APP_URL/api/auth/google/callback` (local: `http://127.0.0.1:4317/api/auth/google/callback`).
    - Calendar: `APP_URL/api/google/callback` (local: `http://127.0.0.1:4317/api/google/callback`).
+   - Optional Gmail: `APP_URL/api/gmail/callback` (local: `http://127.0.0.1:4317/api/gmail/callback`).
      Use the same hostname as `APP_URL` when opening the app. Restart the web process after changing credentials.
 4. While the OAuth app is in Testing, add your account as a test user. Google's testing-mode refresh-token expiration can require reconnecting. Complete the applicable Google production/verification steps before relying on continuous use.
 5. Sign in to your real household and select **Connect Google Calendar**.
@@ -108,6 +109,18 @@ This implementation uses EasyPost's documented **Basic authentication** option, 
 Sign-in requests only `openid email profile`. It uses authorization code flow with PKCE, browser-bound one-use state, a nonce, and server-side signed ID-token validation (Google keys, issuer, audience, expiry, authorized party, nonce, and verified email). Identity access tokens are not persisted. Sessions are HttpOnly, SameSite=Lax, and Secure on HTTPS.
 
 The separate Calendar connection requests only `https://www.googleapis.com/auth/calendar.app.created`. It creates **Package Deliveries** and manages that calendar's events. It does not request access to unrelated calendars. The worker creates/updates events after changes; a disconnected or expired account shows a reconnection message. Disconnecting deletes Doorstep's stored credentials and leaves the existing calendar in your Google account. Reconnecting to the same calendar must use its owning account. Switching accounts requires disconnecting first and creates a new delivery calendar.
+
+#### Optional automatic Gmail import
+
+Enable the Gmail API in the same Google Cloud project, add the Gmail callback above to the existing web client, and declare `https://www.googleapis.com/auth/gmail.readonly` in Data Access. Set `GMAIL_ENABLED=true` in the private server environment after setup. For a personal-use rollout, set `GMAIL_HOUSEHOLD_ID` to the allowed household UUID; connection routes and background ingestion then reject other households. Leave it unset only for a rollout with the applicable Google verification. No new API key is needed. Sign-in and Calendar continue requesting their original scopes; Gmail separately requests `openid email gmail.readonly` with browser-bound state, PKCE, nonce, verified signed identity, and the same Google subject as the signed-in user.
+
+In Settings → Automatic package import, each member chooses **New emails only** (default) or **Last 30 days and new emails**, then connects their own inbox. Matching source messages and extracted packages are shared with the selected household and processed by OpenAI; this disclosure appears before connecting. Google grants mailbox-wide read access, while Doorstep limits ingestion using a shipping/order search. Filters are heuristic: they may miss messages or include unrelated ones. Existing manual forwarding remains available.
+
+The durable worker polls every five minutes with fixed scan windows, pagination checkpoints, a one-day overlap for delayed indexing, and stable mailbox/message deduplication. Already imported sources re-use the existing extraction and shipment matching pipeline. Gmail messages are never marked read, modified, or sent. Checks continue while the browser is closed and catch up after downtime. This version uses polling, not Pub/Sub; attachments other than message text are not imported, while images referenced by the HTML use the existing image pipeline.
+
+Connections are owned by a user and bound to one household. Switching households does not redirect ingestion. Membership removal cascades the connection and pending OAuth attempts. Pause/disconnect serialize against message ingestion; already saved emails may finish processing. Disconnect deletes the saved Gmail credentials and leaves imported data. It does not call Google's project-wide token revocation endpoint, which would also invalidate Calendar grants; users can revoke access in Google settings. Expired/revoked grants show **Reconnect needed**. Reconnection preserves the existing import cutoff and cursor.
+
+`gmail.readonly` is a restricted Google scope. Personal use by a few personally known users may qualify for Google's verification exception (with warnings/user caps). A public Gmail integration requires the applicable verification and server-side security assessment; a production publishing status for basic Google sign-in is not Gmail verification. See [Gmail scopes](https://developers.google.com/workspace/gmail/api/auth/scopes) and [verification requirements and exceptions](https://developers.google.com/identity/protocols/oauth2/production-readiness/restricted-scope-verification).
 
 To see it in Apple Calendar, add your Google account and enable **Package Deliveries**. Other calendars may need enabling on Google's Calendar sync selection page. Apple has its own refresh schedule; neither this app nor a successful Google API write guarantees instant visibility on a physical device.
 
@@ -156,6 +169,7 @@ Repository deployment secrets: `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`, and `EC2_K
 
 - `https://packages.jim-greco.com/api/auth/google/callback`
 - `https://packages.jim-greco.com/api/google/callback`
+- `https://packages.jim-greco.com/api/gmail/callback`
 
 The `doorstep` Compose profile keeps application release pins separate from unrelated infrastructure pushes. `scripts/deploy-ec2.sh` generates database/encryption secrets once, creates the dedicated `doorstep` database owned by `doorstep_app`, and persists a healthy `DOORSTEP_IMAGE` pin. It never restarts the shared database or other applications. Nginx Proxy Manager routes the hostname to `doorstep:4317`.
 

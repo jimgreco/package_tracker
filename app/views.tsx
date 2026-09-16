@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { GmailSettings } from "./gmail-settings";
 import {
   CalendarDays,
   ChevronLeft,
@@ -315,8 +316,8 @@ export function SettingsView({
             </label>
           )}
           <small>
-            Your Google account signs you in. Calendar access is connected
-            separately below.
+            Your Google account signs you in. Gmail and Calendar access are
+            connected separately below.
           </small>
         </section>
       )}
@@ -574,6 +575,7 @@ export function SettingsView({
           Replace subscription link
         </button>
       </section>
+      <GmailSettings settings={s} reload={reload} notify={notify} />
       <section className="settings-card">
         <div className="settings-title">
           <Mail size={21} />

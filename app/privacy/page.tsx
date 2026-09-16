@@ -14,8 +14,8 @@ export default function PrivacyPage() {
       <p className="privacy-updated">Last updated September 15, 2026</p>
       <p>
         Doorstep is a household package tracker operated by Jim Greco. It turns
-        emails you choose to forward into a shared delivery timeline and
-        optional calendar updates.
+        emails you forward or choose to import from Gmail into a shared delivery
+        timeline and optional calendar updates.
       </p>
 
       <h2>Information Doorstep receives</h2>
@@ -23,7 +23,8 @@ export default function PrivacyPage() {
         Google sign-in provides your Google account identifier, verified email
         address, and name. Doorstep uses these to create your account, sign you
         in, and identify household memberships. Doorstep does not receive your
-        Google password or request access to your Gmail inbox.
+        Google password. Signing in does not grant Gmail access; importing from
+        Gmail requires a separate, optional connection.
       </p>
       <p>
         Forwarded emails may include sender and recipient addresses, message
@@ -43,11 +44,39 @@ export default function PrivacyPage() {
         needed to provide their part of Doorstep.
       </p>
       <p>
-        Package information, forwarded messages, and images are shared with
-        other members of your Doorstep household. Household owners manage
-        membership. A private calendar feed link gives anyone holding that link
-        access to its delivery events, so share it only with people or calendar
-        services you want to have access.
+        Package information, forwarded or Gmail-imported messages, and images
+        are shared with other members of your Doorstep household. Household
+        owners manage membership. A private calendar feed link gives anyone
+        holding that link access to its delivery events, so share it only with
+        people or calendar services you want to have access.
+      </p>
+
+      <h2>Optional Gmail import</h2>
+      <p>
+        When you connect Gmail, Google grants read-only access to your mailbox.
+        This permission covers the entire mailbox; Google does not offer a
+        shipping-email-only permission. Doorstep searches for likely order and
+        shipping messages and downloads matching email bodies, headers, links,
+        and image references. These matching source messages are saved in your
+        household and sent to OpenAI for package extraction. Filtering can
+        occasionally match an unrelated message or miss a shipment.
+      </p>
+      <p>
+        Each household member connects their own Google account and chooses
+        whether to start with new mail or include the previous 30 days. The
+        connection remains tied to that household when you switch households.
+        Doorstep checks approximately every five minutes, using an encrypted
+        refresh token, and does not send, modify, delete, or mark Gmail messages
+        as read. Removing a member also removes their Gmail connection to that
+        household.
+      </p>
+      <p>
+        Pause stops new imports; resuming catches up from the previous check.
+        Disconnect removes Doorstep&apos;s stored Gmail credentials and stops
+        future imports. Previously imported messages and packages remain in the
+        household. You can revoke Google permissions in your Google account;
+        revoking Doorstep&apos;s Google access may also disconnect its Calendar
+        integration. Contact us to request deletion of imported data.
       </p>
 
       <h2>Google Calendar</h2>
@@ -67,10 +96,11 @@ export default function PrivacyPage() {
         account settings.
       </p>
       <p>
-        Doorstep uses Google user data only to provide its account and calendar
-        features. It does not sell that data, use it for advertising, or use it
-        to train general-purpose AI models. Doorstep&apos;s use and transfer of
-        information received from Google APIs follows the{" "}
+        Doorstep uses Google user data only to provide its account, package
+        import, and calendar features. It does not sell that data, use it for
+        advertising, or use it to train general-purpose AI models.
+        Doorstep&apos;s use and transfer of information received from Google
+        APIs follows the{" "}
         <a href="https://developers.google.com/terms/api-services-user-data-policy">
           Google API Services User Data Policy
         </a>
@@ -81,10 +111,11 @@ export default function PrivacyPage() {
       <p>
         Doorstep uses session cookies to keep you signed in and protect sign-in
         requests. Hosting services may keep technical request and error logs.
-        Forwarded messages and package history are retained to support your
-        timeline and are not automatically removed when a package is delivered.
-        Stop forwarding emails at any time, disconnect optional calendar access,
-        or contact Jim Greco to request account or household data deletion.
+        Forwarded and imported messages and package history are retained to
+        support your timeline and are not automatically removed when a package
+        is delivered. Stop forwarding emails at any time, pause or disconnect
+        Gmail, disconnect optional calendar access, or contact Jim Greco to
+        request account or household data deletion.
       </p>
       <p>
         For privacy questions or deletion requests, email{" "}

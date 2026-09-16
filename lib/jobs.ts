@@ -7,12 +7,15 @@ import {
   trackerSchema,
 } from "./tracking";
 import { syncShipment, syncAll } from "./google";
+import { gmailConfigured, syncGmail } from "./gmail";
 import { randomUUID } from "node:crypto";
 type Job = {
   id: string;
   kind: string;
   payload: {
     emailId?: string;
+    connectionId?: string;
+    generation?: string;
     shipmentId?: string;
     householdId: string;
     tracker?: unknown;
@@ -32,6 +35,9 @@ export async function runOne() {
   if (!job) return false;
   try {
     switch (job.kind) {
+      case "gmail_sync":
+        await syncGmail(job.payload.connectionId!, job.payload.generation!);
+        break;
       case "parse_email":
         await extractEmail(job.payload.emailId!);
         break;
@@ -108,6 +114,29 @@ export async function schedule() {
           c,
         );
     }
+    if (gmailConfigured()) {
+      const due = (
+        await c.query(
+          `SELECT g.id,g.household_id,g.generation FROM gmail_connections g
+        WHERE g.enabled=true AND g.needs_reconnect=false AND g.next_sync_at<=now() AND ($1::uuid IS NULL OR g.household_id=$1)
+        AND NOT EXISTS(SELECT 1 FROM jobs j WHERE j.kind='gmail_sync' AND j.payload->>'connectionId'=g.id::text
+          AND j.payload->>'generation'=g.generation AND j.status IN ('pending','running')) LIMIT 100`,
+          [process.env.GMAIL_HOUSEHOLD_ID || null],
+        )
+      ).rows;
+      for (const g of due)
+        await enqueue(
+          "gmail_sync",
+          {
+            connectionId: g.id,
+            householdId: g.household_id,
+            generation: g.generation,
+          },
+          `gmail-scheduled:${g.id}:${randomUUID()}`,
+          c,
+        );
+    }
+    await c.query("DELETE FROM gmail_oauth_states WHERE expires_at<now()");
     await c.query("DELETE FROM sessions WHERE expires_at<now()");
     await c.query("DELETE FROM oauth_states WHERE expires_at<now()");
     await c.query("DELETE FROM google_signin_states WHERE expires_at<now()");

@@ -2514,3 +2514,27 @@ footer {
 .member-add {
   margin-top: 20px;
 }
+
+.gmail-settings .setting-row strong {
+  overflow-wrap: anywhere;
+  text-align: right;
+  min-width: 0;
+}
+.gmail-settings .permission-note {
+  align-items: flex-start;
+}
+.gmail-settings .permission-note > svg {
+  flex-shrink: 0;
+}
+.gmail-settings > label {
+  display: grid;
+  gap: 8px;
+  margin: 18px 0;
+}
+.gmail-settings > small {
+  display: block;
+  margin-top: 14px;
+}
+.gmail-settings .button-row {
+  flex-wrap: wrap;
+}

@@ -107,6 +107,9 @@ export default function Page() {
     if (p.get("googleError")) notify(p.get("googleError")!, true);
     else if (p.get("google") === "connected")
       notify("Google connected. Your delivery calendar is being prepared.");
+    if (p.get("gmailError")) notify(p.get("gmailError")!, true);
+    else if (p.get("gmail") === "connected")
+      notify("Gmail connected. Doorstep is checking for packages.");
     void reload();
     const timer = setInterval(() => {
       if (document.visibilityState === "visible") void reload();

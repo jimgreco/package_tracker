@@ -88,12 +88,24 @@ export type Settings = {
     postmark: boolean;
     google: boolean;
     storage: boolean;
+    gmail: boolean;
   };
   google: {
     connected: boolean;
     calendarId: string | null;
     lastSyncedAt: string | null;
     error: string | null;
+  };
+  gmail: {
+    connected: boolean;
+    email: string | null;
+    enabled: boolean;
+    needsReconnect: boolean;
+    lastSyncedAt: string | null;
+    importedCount: number;
+    importing: boolean;
+    error: string | null;
+    otherHouseholdName: string | null;
   };
   worker: { lastSeenAt: string | null; failedJobs: number };
   userName: string;

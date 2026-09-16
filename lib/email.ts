@@ -8,6 +8,7 @@ import { extractionSchema, type Extracted } from "./validation";
 import { normalizeEstimate } from "./calendar";
 import { safeImageDownload, storeImage } from "./storage";
 import type { Item } from "./types";
+import type { PoolClient } from "pg";
 const dateValue = (v: string | null) =>
   v && Number.isFinite(Date.parse(v)) ? new Date(v).toISOString() : null;
 export function cleanEmail(html: string, text: string) {
@@ -82,13 +83,15 @@ export async function receiveEmail(
     text: string;
     html: string;
     sentAt?: string;
+    source?: "Gmail" | "Forwarded email";
     attachments?: z.infer<typeof postmarkSchema>["Attachments"];
   },
+  client?: PoolClient,
 ) {
   const clean = cleanEmail(input.html, input.text);
   const key =
     input.messageId || hash(`${input.from}\n${input.subject}\n${clean.text}`);
-  return transaction(async (c) => {
+  const receive = async (c: PoolClient) => {
     await c.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
       `email:${householdId}:${key}`,
     ]);
@@ -120,7 +123,7 @@ export async function receiveEmail(
       .filter((i) => i.url.startsWith("/api/assets/") || !!safeUrl(i.url));
     const [email] = (
       await c.query(
-        `INSERT INTO source_emails(household_id,message_key,subject,sender,sent_at,body_text,body_html,links,images) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+        `INSERT INTO source_emails(household_id,message_key,subject,sender,sent_at,body_text,body_html,links,images,source) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
         [
           householdId,
           key,
@@ -131,6 +134,7 @@ export async function receiveEmail(
           input.html,
           JSON.stringify(clean.links),
           JSON.stringify(clean.images),
+          input.source || "Forwarded email",
         ],
       )
     ).rows;
@@ -141,7 +145,8 @@ export async function receiveEmail(
       c,
     );
     return { id: email.id, duplicate: false };
-  });
+  };
+  return client ? receive(client) : transaction(receive);
 }
 export async function extractEmail(emailId: string) {
   const [e] = await query(
@@ -450,13 +455,14 @@ export async function applyExtraction(emailId: string, input: Extracted) {
           [saved.id, emailId],
         );
         await c.query(
-          `INSERT INTO tracking_events(shipment_id,event_key,status,message,occurred_at,source) VALUES($1,$2,$3,$4,$5,'Forwarded email') ON CONFLICT DO NOTHING`,
+          `INSERT INTO tracking_events(shipment_id,event_key,status,message,occurred_at,source) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,
           [
             saved.id,
             `email:${emailId}`,
             s.status,
             s.evidence.slice(0, 1500),
             occurrence,
+            e.source,
           ],
         );
         if (tracking && !saved.tracker_id)
