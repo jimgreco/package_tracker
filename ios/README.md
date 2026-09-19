@@ -14,8 +14,8 @@ opens the website in the system browser and may require a separate website login
 - Exact callback: `com.jimgreco.doorstep:/auth/callback`.
 - Existing signing team: `V6JPQCD336`. The existing Apple Development identity and
   wildcard team provisioning profile support direct device builds for this ID.
-  No App Store app record or new explicit bundle registration is required for this
-  development delivery. Confirm/register the explicit identifier before distribution.
+  Distribution uses the explicit app identifier and App Store Connect record
+  described in [TESTFLIGHT.md](TESTFLIGHT.md).
 - Release origin is fixed to `https://packages.jim-greco.com` in code. Release has
   no ATS exceptions, fixture bypass, or configurable server switch.
 - Debug reads the `DOORSTEP_API_ORIGIN` build setting (production by default).
@@ -152,3 +152,9 @@ and applicable account-deletion/privacy requirements. This implementation does n
 assume an exception or silently add Apple login. Authentication uses the system
 session described by [Apple](https://developer.apple.com/documentation/authenticationservices/aswebauthenticationsession)
 and follows [Google's external-user-agent guidance](https://developers.google.com/identity/protocols/oauth2/native-app).
+
+## TestFlight
+
+Use the dedicated Mac runner and API-based release workflow in
+[TESTFLIGHT.md](TESTFLIGHT.md). See [VERIFICATION.md](VERIFICATION.md) for recorded
+validation and the distinction between internal availability and device acceptance.

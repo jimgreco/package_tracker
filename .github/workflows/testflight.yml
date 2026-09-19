@@ -1,0 +1,175 @@
+name: TestFlight
+
+on:
+  workflow_dispatch:
+    inputs:
+      local_verification_sha:
+        description: Full commit SHA that passed the complete local simulator smoke suite
+        required: true
+        type: string
+      upload_build:
+        description: Upload a new build (turn off to verify runner, signing and Apple access only)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: testflight-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, macOS, ARM64, doorstep-release]
+    timeout-minutes: 15
+    steps:
+      - name: Require the locally verified release commit
+        if: inputs.upload_build
+        env:
+          VERIFIED_SHA: ${{ inputs.local_verification_sha }}
+        run: |
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$VERIFIED_SHA" = "$GITHUB_SHA" || { echo "Run the local simulator suite for this exact commit before releasing."; exit 1; }
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Check installed release tools
+        run: |
+          python3 -c 'import sys; assert sys.version_info >= (3, 12); print("Python", sys.version.split()[0])'
+          node -e 'if (Number(process.versions.node.split(".")[0]) < 22) process.exit(1); console.log("Node", process.versions.node)'
+      - name: Release helper tests
+        run: |
+          node --test .github/scripts/tests/*.test.mjs
+          python3 -m unittest discover -s .github/scripts/tests -p 'test_*.py'
+
+  build:
+    needs: verify
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, macOS, ARM64, doorstep-release]
+    timeout-minutes: 30
+    outputs:
+      build_number: ${{ steps.release.outputs.build_number }}
+    environment: production
+    env:
+      APPLE_TEAM_ID: V6JPQCD336
+      IOS_BUNDLE_ID: com.jimgreco.doorstep
+      APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check installed release tools
+        run: |
+          python3 -c 'import sys; assert sys.version_info >= (3, 12); print("Python", sys.version.split()[0])'
+          node -e 'if (Number(process.versions.node.split(".")[0]) < 22) process.exit(1); console.log("Node", process.versions.node)'
+      - name: Select Xcode and install XcodeGen
+        run: bash .github/scripts/select-xcode.sh
+      - name: Import signing assets and configure Connect API key
+        env:
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          IOS_DIST_CERT_P12: ${{ secrets.IOS_DIST_CERT_P12 }}
+          IOS_DIST_CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: bash .github/scripts/import-signing.sh
+      - name: Resolve build number through Connect API
+        run: |
+          COMMIT_COUNT="$(git rev-list HEAD --count)" node .github/scripts/testflight.mjs number
+      - name: Create App Store profile through Connect API
+        run: |
+          node .github/scripts/ensure-app-store-profile.mjs \
+            --bundle-id "$IOS_BUNDLE_ID" \
+            --profile-name "Doorstep App Store ${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --certificate-der "$RUNNER_TEMP/doorstep-cert.der" \
+            --output "$RUNNER_TEMP/doorstep.mobileprovision"
+          python3 .github/scripts/install-profile.py
+      - name: Generate signed release project
+        id: release
+        run: |
+          mkdir -p .build-report
+          printf 'build_number=%s\n' "$IOS_BUILD_NUMBER" >> "$GITHUB_OUTPUT"
+          python3 .github/scripts/prepare-release.py project
+          xcodegen generate --spec ios/ci-project.yml --project ios
+      - name: Archive
+        run: |
+          xcodebuild archive -project ios/Doorstep.xcodeproj -scheme Doorstep \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Doorstep.xcarchive" \
+            -derivedDataPath "$RUNNER_TEMP/Doorstep-derived" \
+            -authenticationKeyPath "$APP_STORE_CONNECT_API_KEY_PATH" \
+            -authenticationKeyID "$APP_STORE_CONNECT_KEY_ID" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
+            OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH" \
+            2>&1 | tee .build-report/ci-archive.log
+          python3 .github/scripts/prepare-release.py archive
+      - name: Export IPA
+        run: |
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/Doorstep.xcarchive" \
+            -derivedDataPath "$RUNNER_TEMP/Doorstep-derived" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -authenticationKeyPath "$APP_STORE_CONNECT_API_KEY_PATH" \
+            -authenticationKeyID "$APP_STORE_CONNECT_KEY_ID" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
+            2>&1 | tee .build-report/ci-export.log
+      - name: Upload to TestFlight with Connect API credentials
+        if: inputs.upload_build
+        run: |
+          IPA_PATH="$RUNNER_TEMP/export/Doorstep.ipa"
+          test -f "$IPA_PATH"
+          xcrun altool --upload-app --type ios --file "$IPA_PATH" \
+            --apiKey "$APP_STORE_CONNECT_KEY_ID" \
+            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID" \
+            2>&1 | tee .build-report/ci-upload.log
+          grep -Fq 'UPLOAD SUCCEEDED' .build-report/ci-upload.log
+          printf 'Build %s uploaded. Waiting for Apple processing and internal testing state.\n' "$IOS_BUILD_NUMBER" >> "$GITHUB_STEP_SUMMARY"
+      - name: Preserve release evidence locally
+        if: always()
+        run: python3 .github/scripts/preserve-release.py
+      - name: Clean up signing assets
+        if: always()
+        run: python3 .github/scripts/cleanup-signing.py
+
+  processing:
+    needs: build
+    runs-on: [self-hosted, macOS, ARM64, doorstep-release]
+    timeout-minutes: 25
+    environment: production
+    env:
+      IOS_BUNDLE_ID: com.jimgreco.doorstep
+      IOS_BUILD_NUMBER: ${{ needs.build.outputs.build_number }}
+      APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Check installed release tools
+        run: |
+          python3 -c 'import sys; assert sys.version_info >= (3, 12); print("Python", sys.version.split()[0])'
+          node -e 'if (Number(process.versions.node.split(".")[0]) < 22) process.exit(1); console.log("Node", process.versions.node)'
+      - name: Configure Connect API key
+        env:
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+        run: bash .github/scripts/configure-connect-key.sh
+      - name: Verify processing and internal TestFlight availability through API
+        run: |
+          mkdir -p .build-report
+          if [ "${{ inputs.upload_build }}" = "true" ]; then
+            node .github/scripts/testflight.mjs wait
+          else
+            node .github/scripts/testflight.mjs check
+          fi
+      - name: Preserve Apple processing evidence locally
+        if: always()
+        run: python3 .github/scripts/preserve-release.py
+      - name: Clean up Connect API key
+        if: always()
+        run: python3 .github/scripts/cleanup-signing.py

@@ -18,3 +18,7 @@ ios/**/xcuserdata/
 *.xcresult/
 output/ios/
 ios/Doorstep [0-9]*.xcodeproj/
+
+ios/ci-project.yml
+.build-report/
+.github/scripts/**/__pycache__/
