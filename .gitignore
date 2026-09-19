@@ -11,3 +11,9 @@ playwright-report/
 .DS_Store
 .playwright-cli/
 output/playwright/
+
+ios/build*/
+ios/**/*.xcuserstate
+ios/**/xcuserdata/
+*.xcresult/
+output/ios/

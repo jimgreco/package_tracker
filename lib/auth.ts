@@ -19,6 +19,7 @@ export type Context = {
   forwardingToken: string;
   feedToken: string;
   demo: boolean;
+  nativeSessionHash?: string;
 };
 export async function context(
   req: Request,
@@ -30,15 +31,27 @@ export async function context(
     .map((x) => x.trim())
     .find((x) => x.startsWith("doorstep_session="))
     ?.slice("doorstep_session=".length);
-  let rows = token
+  const authorization = req.headers.get("authorization");
+  if (authorization && token)
+    throw new AppError("Use one sign-in method per request.", 400);
+  if (authorization && !/^Bearer [a-f0-9]{64}$/.test(authorization))
+    throw new AppError("Please sign in again.", 401);
+  const nativeToken = authorization?.slice(7);
+  let rows = nativeToken
     ? await query(
-        `SELECT u.*,h.name household_name,h.time_zone,h.forwarding_token,h.feed_token,h.is_demo FROM sessions s JOIN users u ON u.id=s.user_id JOIN households h ON h.id=u.household_id JOIN household_members m ON m.household_id=h.id AND m.user_id=u.id WHERE s.token_hash=$1 AND s.expires_at>now()`,
-        [hash(token)],
+        `SELECT u.*,h.name household_name,h.time_zone,h.forwarding_token,h.feed_token,h.is_demo FROM native_sessions s JOIN users u ON u.id=s.user_id JOIN households h ON h.id=u.household_id JOIN household_members m ON m.household_id=h.id AND m.user_id=u.id WHERE s.token_hash=$1 AND s.expires_at>now()`,
+        [hash(nativeToken)],
       )
-    : [];
+    : token
+      ? await query(
+          `SELECT u.*,h.name household_name,h.time_zone,h.forwarding_token,h.feed_token,h.is_demo FROM sessions s JOIN users u ON u.id=s.user_id JOIN households h ON h.id=u.household_id JOIN household_members m ON m.household_id=h.id AND m.user_id=u.id WHERE s.token_hash=$1 AND s.expires_at>now()`,
+          [hash(token)],
+        )
+      : [];
   if (
     !rows.length &&
     allowDemo &&
+    !authorization &&
     process.env.DEMO_MODE === "true" &&
     ["localhost", "127.0.0.1"].includes(new URL(origin()).hostname)
   )
@@ -48,7 +61,11 @@ export async function context(
     );
   const u = rows[0];
   if (!u) throw new AppError("Sign in to your household.", 401);
+  const expectedHousehold = req.headers.get("x-doorstep-household");
+  if (nativeToken && expectedHousehold && expectedHousehold !== u.household_id)
+    throw new AppError("Your household changed. Refresh to continue.", 409);
   return {
+    ...(nativeToken ? { nativeSessionHash: hash(nativeToken) } : {}),
     userId: u.id,
     householdId: u.household_id,
     name: u.name,

@@ -64,6 +64,7 @@ before(async () => {
     "006_gmail.sql",
     "007_dismissed.sql",
     "008_retailer_reference.sql",
+    "009_native_sessions.sql",
   ])
     await query(await readFile("db/" + file, "utf8"));
   const [h] = await query(

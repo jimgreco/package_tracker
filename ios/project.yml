@@ -1,0 +1,57 @@
+name: Doorstep
+options:
+  deploymentTarget:
+    iOS: '18.0'
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: '6.0'
+    DEVELOPMENT_TEAM: V6JPQCD336
+    MARKETING_VERSION: '1.0'
+    CURRENT_PROJECT_VERSION: '1'
+    TARGETED_DEVICE_FAMILY: '1'
+    SUPPORTS_MACCATALYST: NO
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+targets:
+  Doorstep:
+    type: application
+    platform: iOS
+    sources:
+      - path: Doorstep
+        excludes: ["Info*.plist"]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jimgreco.doorstep
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Doorstep/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        DOORSTEP_API_ORIGIN: https://packages.jim-greco.com
+      configs:
+        Debug:
+          INFOPLIST_FILE: Doorstep/Info-Debug.plist
+        Release:
+          INFOPLIST_FILE: Doorstep/Info.plist
+    scheme:
+      testTargets: [DoorstepTests, DoorstepUITests]
+  DoorstepTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [DoorstepTests]
+    dependencies:
+      - target: Doorstep
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jimgreco.doorstep.tests
+        GENERATE_INFOPLIST_FILE: YES
+  DoorstepUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [DoorstepUITests]
+    dependencies:
+      - target: Doorstep
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jimgreco.doorstep.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Doorstep

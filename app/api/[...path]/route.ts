@@ -1,3 +1,12 @@
+import {
+  nativeStart,
+  nativeAuthorize,
+  nativeCallbackAttempt,
+  nativeComplete,
+  nativeReturn,
+  nativeExchange,
+  checkNativePublicRequest,
+} from "@/lib/native-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { query, transaction, enqueue } from "@/lib/db";
@@ -61,6 +70,21 @@ async function handle(
   const { path } = await params;
   const route = path.join("/");
   const method = req.method;
+  let requestContext: Awaited<ReturnType<typeof context>> | undefined;
+  const json = (value: unknown, status = 200) =>
+    NextResponse.json(value, {
+      status,
+      headers: {
+        "Cache-Control": "no-store",
+        ...(requestContext
+          ? {
+              "X-Doorstep-Household": requestContext.householdId,
+              "X-Doorstep-User": requestContext.userId,
+            }
+          : {}),
+        ...(status === 429 ? { "Retry-After": "60" } : {}),
+      },
+    });
   try {
     if (route === "health" && method === "GET") {
       await query("SELECT 1");
@@ -134,7 +158,33 @@ async function handle(
         },
       });
     }
-    if (method !== "GET") checkOrigin(req);
+    if (
+      ["native/auth/start", "native/auth/exchange"].includes(route) &&
+      method === "POST"
+    ) {
+      checkNativePublicRequest(req);
+      const input = await jsonBody(req, 4096);
+      return json(
+        route.endsWith("/start")
+          ? await nativeStart(input)
+          : await nativeExchange(input),
+      );
+    }
+    if (route === "native/auth/authorize" && method === "GET") {
+      const result = await nativeAuthorize(req);
+      const response = NextResponse.redirect(result.url);
+      response.headers.set("Set-Cookie", result.cookie);
+      response.headers.set("Cache-Control", "no-store");
+      response.headers.set("Referrer-Policy", "no-referrer");
+      return response;
+    }
+    if (req.headers.has("authorization")) {
+      requestContext = await context(req, false);
+      if (!requestContext.nativeSessionHash)
+        throw new AppError("Please sign in again.", 401);
+      if (["google", "gmail", "auth"].includes(path[0]))
+        throw new AppError("Manage connections on the Doorstep website.", 403);
+    } else if (method !== "GET") checkOrigin(req);
     if (route === "auth/config" && method === "GET")
       return json({ google: googleSigninConfigured() });
     if (route === "auth/google/start" && method === "POST") {
@@ -145,20 +195,33 @@ async function handle(
     }
     if (route === "auth/google/callback" && method === "GET") {
       let response: NextResponse;
+      const nativeAttempt = await nativeCallbackAttempt(req);
       try {
         const result = await googleSigninCallback(req);
-        response = NextResponse.redirect(`${origin()}/`);
-        response.headers.append(
-          "Set-Cookie",
-          await sessionCookie(result.userId),
-        );
+        if (nativeAttempt) {
+          response = NextResponse.redirect(
+            await nativeComplete(
+              nativeAttempt.id,
+              result.userId,
+              nativeAttempt.app_state,
+            ),
+          );
+        } else {
+          response = NextResponse.redirect(`${origin()}/`);
+          response.headers.append(
+            "Set-Cookie",
+            await sessionCookie(result.userId),
+          );
+        }
       } catch (error) {
         const message =
           error instanceof AppError
             ? error.message
             : "Google sign-in could not finish. Please try again.";
         response = NextResponse.redirect(
-          `${origin()}/?authError=${encodeURIComponent(message)}`,
+          nativeAttempt
+            ? nativeReturn(nativeAttempt.app_state, { error: "signin_failed" })
+            : `${origin()}/?authError=${encodeURIComponent(message)}`,
         );
       }
       response.headers.append("Set-Cookie", googleSigninCookie());
@@ -200,7 +263,17 @@ async function handle(
       response.headers.set("Referrer-Policy", "no-referrer");
       return response;
     }
-    const ctx = await context(req, route !== "google/callback");
+    const ctx =
+      requestContext ?? (await context(req, route !== "google/callback"));
+    requestContext = ctx;
+    if (route === "native/auth/logout" && method === "POST") {
+      if (!ctx.nativeSessionHash)
+        throw new AppError("A native session is required.", 401);
+      await query("DELETE FROM native_sessions WHERE token_hash=$1", [
+        ctx.nativeSessionHash,
+      ]);
+      return json({ ok: true });
+    }
     if (route === "gmail/connect" && method === "POST") {
       const result = await gmailStart(ctx, await jsonBody(req));
       const response = json({ url: result.url });
@@ -218,7 +291,17 @@ async function handle(
       return json(await dashboard(ctx));
     if (route === "shipments" && method === "POST") {
       await rateLimit(`manual:${ctx.householdId}`, 100, 3600);
-      return json({ id: await saveManual(await jsonBody(req), ctx) }, 201);
+      return json(
+        {
+          id: await saveManual(
+            await jsonBody(req),
+            ctx,
+            undefined,
+            req.headers.get("idempotency-key") || undefined,
+          ),
+        },
+        201,
+      );
     }
     if (path[0] === "shipments" && path[1]) {
       const id = uuid.parse(path[1]);
@@ -340,6 +423,10 @@ async function handle(
           status: email.status,
           error: email.error,
           extraction: email.extraction,
+          shipments: await query(
+            "SELECT s.id,o.merchant FROM shipment_emails se JOIN shipments s ON s.id=se.shipment_id JOIN orders o ON o.id=s.order_id WHERE se.email_id=$1 AND s.household_id=$2 AND s.archived_at IS NULL ORDER BY s.created_at DESC",
+            [id, ctx.householdId],
+          ),
         });
       if (path[2] === "retry" && method === "POST") {
         requireReal(ctx);
@@ -404,6 +491,8 @@ async function handle(
         {
           headers: {
             "Content-Type": "application/json",
+            "X-Doorstep-Household": ctx.householdId,
+            "X-Doorstep-User": ctx.userId,
             "Content-Disposition":
               'attachment; filename="doorstep-export.json"',
             "Cache-Control": "no-store",
@@ -455,6 +544,8 @@ async function handle(
       return new Response(new Uint8Array(image.bytes), {
         headers: {
           "Content-Type": image.type,
+          "X-Doorstep-Household": ctx.householdId,
+          "X-Doorstep-User": ctx.userId,
           "Cache-Control": "private, max-age=3600",
           "Content-Security-Policy": "default-src 'none'",
         },

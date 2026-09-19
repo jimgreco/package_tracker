@@ -27,7 +27,11 @@ export function googleSigninConfigured() {
 export function googleSigninCookie(value = "") {
   return `${cookieName}=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${value ? 600 : 0}${origin().startsWith("https:") ? "; Secure" : ""}`;
 }
-export async function googleSigninStart(req: Request, input: unknown) {
+export async function googleSigninStart(
+  req: Request,
+  input: unknown,
+  nativeAttemptId?: string,
+) {
   if (!googleSigninConfigured())
     throw new AppError(
       "Google sign-in needs to be configured by the person hosting Doorstep. Please ask them to connect the Google OAuth client.",
@@ -40,10 +44,21 @@ export async function googleSigninStart(req: Request, input: unknown) {
     nonce = randomToken();
   const verifier = randomBytes(32).toString("base64url");
   await query(
-    `INSERT INTO google_signin_states(state_hash,browser_hash,verifier,nonce_hash,expires_at)
-    VALUES($1,$2,$3,$4,now()+interval '10 minutes')`,
-    [hash(state), hash(browser), encrypt(verifier), hash(nonce)],
+    `INSERT INTO google_signin_states(state_hash,browser_hash,verifier,nonce_hash,expires_at,native_attempt_id)
+    VALUES($1,$2,$3,$4,now()+interval '10 minutes',$5)`,
+    [
+      hash(state),
+      hash(browser),
+      encrypt(verifier),
+      hash(nonce),
+      nativeAttemptId || null,
+    ],
   );
+  if (nativeAttemptId)
+    await query(
+      "UPDATE native_login_attempts SET browser_hash=$2 WHERE id=$1",
+      [nativeAttemptId, hash(browser)],
+    );
   const params = new URLSearchParams({
     client_id: configured("GOOGLE_CLIENT_ID"),
     redirect_uri: redirectUri(),

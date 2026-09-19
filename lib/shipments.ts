@@ -7,7 +7,7 @@ import type {
   TrackingEvent,
 } from "./types";
 import type { Context } from "./auth";
-import { AppError, origin, safeUrl } from "./security";
+import { AppError, origin, safeUrl, hash } from "./security";
 import { manualSchema } from "./validation";
 import { normalizeEstimate, validZone } from "./calendar";
 import { gmailAvailable } from "./gmail";
@@ -148,10 +148,13 @@ export async function settings(ctx: Context): Promise<Settings> {
     members: members as Settings["members"],
   };
 }
-export async function emails(householdId: string): Promise<Email[]> {
+export async function emails(
+  householdId: string,
+  includeIgnored = false,
+): Promise<Email[]> {
   const rows = await query(
-    "SELECT id,subject,sender,sent_at,received_at,status,error FROM source_emails WHERE household_id=$1 AND status<>'ignored' ORDER BY coalesce(sent_at,received_at) DESC,id DESC LIMIT 100",
-    [householdId],
+    "SELECT id,subject,sender,sent_at,received_at,status,error FROM source_emails WHERE household_id=$1 AND ($2 OR status<>'ignored') ORDER BY coalesce(sent_at,received_at) DESC,id DESC LIMIT 100",
+    [householdId, includeIgnored],
   );
   return rows.map((r) => ({
     id: r.id,
@@ -166,7 +169,7 @@ export async function emails(householdId: string): Promise<Email[]> {
 export async function dashboard(ctx: Context): Promise<DashboardData> {
   const [s, e, settingsData] = await Promise.all([
     shipments(ctx.householdId, false, true),
-    emails(ctx.householdId),
+    emails(ctx.householdId, !!ctx.nativeSessionHash),
     settings(ctx),
   ]);
   return { shipments: s, emails: e, settings: settingsData };
@@ -276,8 +279,16 @@ export async function quickShipmentAction(
     }
   });
 }
-export async function saveManual(input: unknown, ctx: Context, id?: string) {
+export async function saveManual(
+  input: unknown,
+  ctx: Context,
+  id?: string,
+  idempotencyKey?: string,
+) {
   const v = manualSchema.parse(input);
+  if (idempotencyKey && !/^[A-Za-z0-9_-]{16,128}$/.test(idempotencyKey))
+    throw new AppError("Invalid save attempt key.");
+  const bodyHash = hash(JSON.stringify(v));
   v.estimate = normalizeEstimate(v.estimate);
   if (v.trackingUrl && !safeUrl(v.trackingUrl))
     throw new AppError("Tracking links must use HTTPS.");
@@ -297,6 +308,22 @@ export async function saveManual(input: unknown, ctx: Context, id?: string) {
     await c.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
       ctx.householdId,
     ]);
+    if (!id && idempotencyKey) {
+      const [previous] = (
+        await c.query(
+          "SELECT * FROM manual_create_attempts WHERE user_id=$1 AND household_id=$2 AND route='shipments' AND key=$3",
+          [ctx.userId, ctx.householdId, idempotencyKey],
+        )
+      ).rows;
+      if (previous) {
+        if (previous.body_hash !== bodyHash)
+          throw new AppError(
+            "This save attempt was already used with different details. Start a new save.",
+            409,
+          );
+        return previous.shipment_id as string;
+      }
+    }
     let existing;
     if (id) {
       existing = (
@@ -413,6 +440,11 @@ export async function saveManual(input: unknown, ctx: Context, id?: string) {
         c,
       );
     }
+    if (!id && idempotencyKey)
+      await c.query(
+        "INSERT INTO manual_create_attempts(user_id,household_id,route,key,body_hash,shipment_id) VALUES($1,$2,'shipments',$3,$4,$5)",
+        [ctx.userId, ctx.householdId, idempotencyKey, bodyHash, saved.id],
+      );
     return saved.id as string;
   });
 }

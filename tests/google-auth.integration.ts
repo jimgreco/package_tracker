@@ -46,6 +46,7 @@ before(async () => {
     "006_gmail.sql",
     "007_dismissed.sql",
     "008_retailer_reference.sql",
+    "009_native_sessions.sql",
   ])
     await query(await readFile("db/" + file, "utf8"));
   keys = await generateKeyPair("RS256");
@@ -502,4 +503,403 @@ test("calendar authorization stays bound to the household where it began", async
     [hash(started.searchParams.get("state")!)],
   );
   assert.equal(state.household_id, householdId);
+});
+
+async function nativeCall(
+  path: string,
+  body?: unknown,
+  token?: string,
+  extra: Record<string, string> = {},
+) {
+  const method = body === undefined ? "GET" : "POST";
+  return (method === "GET" ? GET : POST)(
+    new Request(appUrl + "/api/" + path, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+        ...extra,
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    }),
+    { params: Promise.resolve({ path: path.split("?")[0].split("/") }) },
+  );
+}
+async function nativeAttempt() {
+  const verifier = randomToken(),
+    state = randomToken();
+  const challenge = createHash("sha256").update(verifier).digest("base64url");
+  const start = await nativeCall("native/auth/start", { state, challenge });
+  assert.equal(start.status, 200);
+  const authorizationURL = (await start.json()).url;
+  assert.equal(new URL(authorizationURL).origin, appUrl);
+  const entry = await nativeCall(
+    authorizationURL.replace(appUrl + "/api/", ""),
+  );
+  const url = new URL(entry.headers.get("location")!);
+  const cookie = entry.headers.get("set-cookie")!.split(";")[0];
+  assert.equal(url.searchParams.get("scope"), "openid email profile");
+  const [google] = await query(
+    "SELECT * FROM google_signin_states WHERE state_hash=$1",
+    [hash(url.searchParams.get("state")!)],
+  );
+  return {
+    appState: state,
+    appVerifier: verifier,
+    url,
+    cookie,
+    verifier: decrypt(google.verifier),
+    authorizationURL,
+    nativeId: google.native_attempt_id,
+  };
+}
+async function nativeCode() {
+  const a = await nativeAttempt();
+  const { response } = await finish(a);
+  assert.equal(
+    authSession(response),
+    undefined,
+    "Native login never creates a web session",
+  );
+  const callback = new URL(response.headers.get("location")!);
+  assert.equal(callback.protocol, "com.jimgreco.doorstep:");
+  assert.equal(callback.pathname, "/auth/callback");
+  assert.equal(callback.searchParams.get("state"), a.appState);
+  assert.deepEqual([...callback.searchParams.keys()].sort(), ["code", "state"]);
+  return {
+    ...a,
+    body: {
+      code: callback.searchParams.get("code"),
+      verifier: a.appVerifier,
+      state: a.appState,
+    },
+  };
+}
+test("native login validates destination, browser binding, expiry, consent, identity and replay", async () => {
+  const state = randomToken(),
+    challenge = createHash("sha256").update(randomToken()).digest("base64url");
+  assert.equal(
+    (
+      await nativeCall("native/auth/start", {
+        state,
+        challenge,
+        callback: "evil:/",
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await nativeCall("native/auth/start", { state, challenge }, undefined, {
+        origin: "https://evil.test",
+      })
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await nativeCall("native/auth/start", { state, challenge }, undefined, {
+        cookie: "doorstep_session=anything",
+      })
+    ).status,
+    400,
+  );
+  const expired = await nativeAttempt();
+  await query(
+    "UPDATE native_login_attempts SET expires_at=now()-interval '1 second' WHERE id=$1",
+    [expired.nativeId],
+  );
+  assert.equal(
+    (await nativeCall(expired.authorizationURL.replace(appUrl + "/api/", "")))
+      .status,
+    400,
+  );
+  const expiredCallback = await nativeAttempt();
+  await query(
+    "UPDATE native_login_attempts SET expires_at=now()-interval '1 second' WHERE id=$1",
+    [expiredCallback.nativeId],
+  );
+  const expiredResponse = (await finish(expiredCallback)).response;
+  assert.equal(authSession(expiredResponse), undefined);
+  assert.equal(
+    new URL(expiredResponse.headers.get("location")!).searchParams.get("error"),
+    "signin_failed",
+  );
+  const denied = await nativeAttempt();
+  const deniedResponse = await call(
+    `auth/google/callback?state=${denied.url.searchParams.get("state")}&error=access_denied`,
+    undefined,
+    denied.cookie,
+    false,
+  );
+  assert.equal(
+    new URL(deniedResponse.headers.get("location")!).searchParams.get("error"),
+    "signin_failed",
+  );
+  assert.equal(
+    (
+      await query("SELECT code_hash FROM native_login_attempts WHERE id=$1", [
+        denied.nativeId,
+      ])
+    )[0].code_hash,
+    null,
+  );
+  const invalid = await nativeAttempt();
+  const invalidResponse = await finish(invalid, { email_verified: false });
+  assert.equal(
+    new URL(invalidResponse.response.headers.get("location")!).searchParams.get(
+      "error",
+    ),
+    "signin_failed",
+  );
+  const browser = await nativeAttempt();
+  const wrongBrowser = await call(
+    `auth/google/callback?state=${browser.url.searchParams.get("state")}&code=unused`,
+    undefined,
+    "doorstep_google_signin=wrong",
+    false,
+  );
+  assert.ok(authError(wrongBrowser));
+  const attempt = await nativeCode();
+  assert.equal(
+    (
+      await nativeCall("native/auth/exchange", {
+        ...attempt.body,
+        state: randomToken(),
+      })
+    ).status,
+    401,
+  );
+  assert.equal(
+    (
+      await nativeCall("native/auth/exchange", {
+        ...attempt.body,
+        verifier: randomToken(),
+      })
+    ).status,
+    401,
+  );
+  const replies = await Promise.all([
+    nativeCall("native/auth/exchange", attempt.body),
+    nativeCall("native/auth/exchange", attempt.body),
+  ]);
+  assert.deepEqual(replies.map((r) => r.status).sort(), [200, 401]);
+  const session = await replies.find((r) => r.status === 200)!.json();
+  assert.equal(session.userId, googleUserId);
+  assert.equal(
+    (
+      await query(
+        "SELECT count(*)::int n FROM users WHERE google_subject='google-owner'",
+      )
+    )[0].n,
+    1,
+  );
+  assert.equal(
+    (
+      await query(
+        "SELECT token_hash FROM native_sessions WHERE token_hash=$1",
+        [hash(session.token)],
+      )
+    )[0].token_hash,
+    hash(session.token),
+  );
+  const expiry = await nativeCode();
+  await query(
+    "UPDATE native_login_attempts SET code_expires_at=now()-interval '1 second' WHERE id=$1",
+    [expiry.nativeId],
+  );
+  assert.equal(
+    (await nativeCall("native/auth/exchange", expiry.body)).status,
+    401,
+  );
+});
+test("native bearer isolation, Origin separation, revocation and atomic manual creation", async () => {
+  const connectionsBefore = await query(
+    "SELECT * FROM google_connections ORDER BY household_id",
+  );
+  const gmailBefore = await query(
+    "SELECT * FROM gmail_connections ORDER BY user_id",
+  );
+  const a = await nativeCode();
+  const session = await (
+    await nativeCall("native/auth/exchange", a.body)
+  ).json();
+  const token = session.token;
+  const dashboard = await nativeCall("dashboard", undefined, token);
+  assert.equal(dashboard.status, 200);
+  assert.equal(
+    dashboard.headers.get("x-doorstep-household"),
+    session.householdId,
+  );
+  assert.equal(
+    (await nativeCall("dashboard", undefined, randomToken())).status,
+    401,
+  );
+  assert.equal(
+    (
+      await nativeCall("dashboard", undefined, token, {
+        cookie: (await sessionCookie(googleUserId)).split(";")[0],
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await nativeCall("dashboard", undefined, token, {
+        "x-doorstep-household": randomUUID(),
+      })
+    ).status,
+    409,
+  );
+  assert.equal(
+    (await nativeCall("settings/retry-jobs", {}, randomToken())).status,
+    401,
+  );
+  assert.equal(
+    (
+      await nativeCall("settings/retry-jobs", {}, undefined, {
+        cookie: (await sessionCookie(googleUserId)).split(";")[0],
+      })
+    ).status,
+    403,
+  );
+  assert.equal((await nativeCall("gmail/pause", {}, token)).status, 403);
+  assert.equal((await nativeCall("google/disconnect", {}, token)).status, 403);
+  const input = {
+    merchant: "Native fixture",
+    orderNumber: null,
+    orderedAt: null,
+    items: [{ name: "Notebook", quantity: 1, imageUrl: null }],
+    carrier: null,
+    trackingNumber: null,
+    trackingUrl: null,
+    status: "ordered",
+    shippedAt: null,
+    estimate: null,
+    deliveredAt: null,
+    manualOverride: false,
+  };
+  const key = randomToken();
+  const saved = await Promise.all([
+    nativeCall("shipments", input, token, { "idempotency-key": key }),
+    nativeCall("shipments", input, token, { "idempotency-key": key }),
+  ]);
+  assert.deepEqual(
+    saved.map((r) => r.status),
+    [201, 201],
+  );
+  const ids = await Promise.all(saved.map((r) => r.json()));
+  assert.equal(ids[0].id, ids[1].id);
+  assert.equal(
+    (
+      await nativeCall("shipments", { ...input, merchant: "Changed" }, token, {
+        "idempotency-key": key,
+      })
+    ).status,
+    409,
+  );
+  assert.equal(
+    (
+      await query(
+        "SELECT count(*)::int n FROM shipments s JOIN orders o ON o.id=s.order_id WHERE o.merchant='Native fixture'",
+      )
+    )[0].n,
+    1,
+  );
+  assert.equal(
+    (await nativeCall(`shipments/${ids[0].id}/dismiss`, {}, token)).status,
+    200,
+  );
+  assert.equal(
+    (
+      await (
+        await nativeCall(`shipments/${ids[0].id}`, undefined, token)
+      ).json()
+    ).shipment.status,
+    "ordered",
+  );
+  assert.equal(
+    (await nativeCall(`shipments/${ids[0].id}/restore`, {}, token)).status,
+    200,
+  );
+  const [source] = await query(
+    "INSERT INTO source_emails(household_id,message_key,subject,sender,body_text,status) VALUES($1,$2,'Physical order','fixture@example.test','Synthetic order evidence','processed') RETURNING id",
+    [session.householdId, randomToken()],
+  );
+  await query(
+    "INSERT INTO shipment_emails(shipment_id,email_id) VALUES($1,$2)",
+    [ids[0].id, source.id],
+  );
+  const linkedEmail = await (
+    await nativeCall(`emails/${source.id}`, undefined, token)
+  ).json();
+  assert.deepEqual(linkedEmail.shipments, [
+    { id: ids[0].id, merchant: "Native fixture" },
+  ]);
+  const target = await (
+    await nativeCall(
+      "shipments",
+      { ...input, merchant: "Retained native fixture" },
+      token,
+      { "idempotency-key": randomToken() },
+    )
+  ).json();
+  assert.equal(
+    (
+      await nativeCall(
+        `shipments/${ids[0].id}/merge`,
+        { targetId: target.id },
+        token,
+      )
+    ).status,
+    200,
+  );
+  const retained = await (
+    await nativeCall(`shipments/${target.id}`, undefined, token)
+  ).json();
+  assert.equal(retained.shipment.merchant, "Retained native fixture");
+  assert.ok(retained.emails.some((e: { id: string }) => e.id === source.id));
+  const mergedDashboard = await (
+    await nativeCall("dashboard", undefined, token)
+  ).json();
+  assert.ok(
+    !mergedDashboard.shipments.some((s: { id: string }) => s.id === ids[0].id),
+  );
+  assert.deepEqual(
+    (await (await nativeCall(`emails/${source.id}`, undefined, token)).json())
+      .shipments,
+    [{ id: target.id, merchant: "Retained native fixture" }],
+  );
+  // A membership deleted after session issuance never authorizes another read.
+  await query(
+    "DELETE FROM household_members WHERE user_id=$1 AND household_id=$2",
+    [session.userId, session.householdId],
+  );
+  assert.equal((await nativeCall("dashboard", undefined, token)).status, 401);
+  await query(
+    "INSERT INTO household_members(user_id,household_id,role) VALUES($1,$2,'owner')",
+    [session.userId, session.householdId],
+  );
+  assert.equal((await nativeCall("native/auth/logout", {}, token)).status, 200);
+  assert.equal((await nativeCall("dashboard", undefined, token)).status, 401);
+  const b = await nativeCode();
+  const second = await (
+    await nativeCall("native/auth/exchange", b.body)
+  ).json();
+  await query(
+    "UPDATE native_sessions SET expires_at=now()-interval '1 second' WHERE token_hash=$1",
+    [hash(second.token)],
+  );
+  assert.equal(
+    (await nativeCall("dashboard", undefined, second.token)).status,
+    401,
+  );
+  assert.deepEqual(
+    await query("SELECT * FROM google_connections ORDER BY household_id"),
+    connectionsBefore,
+  );
+  assert.deepEqual(
+    await query("SELECT * FROM gmail_connections ORDER BY user_id"),
+    gmailBefore,
+  );
 });

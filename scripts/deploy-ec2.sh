@@ -51,6 +51,7 @@ for service in doorstep doorstep-worker; do
     fi
     sleep 2
   done
+  echo "$service healthy ($build)"
 done
 compose exec -T doorstep node -e 'fetch("http://127.0.0.1:4317/api/health").then(async r=>{const h=await r.json();if(!r.ok||h.build!==process.env.APP_BUILD||h.database!=="ready")process.exit(1);console.log("Healthy Doorstep build:",h.build)}).catch(()=>process.exit(1))' </dev/null
 # Persist only a healthy release pin for subsequent consolidated deployments.

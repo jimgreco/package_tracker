@@ -221,3 +221,11 @@ An optional live extraction regression check uses synthetic emails and makes no 
 - `lib/calendar.ts`, `lib/google.ts`: calendar representations and Google synchronization.
 - `lib/jobs.ts`, `scripts/worker.ts`: durable background processing.
 - `db/`: ordered PostgreSQL migrations.
+
+## iPhone app
+
+The SwiftUI client is in [`ios/`](ios/README.md). It uses the same server-owned
+household records, with Google-only native login, package editing, inbox, and
+settings. Gmail and Calendar connections remain managed on the website. See the
+[iPhone verification record](ios/VERIFICATION.md) for simulator, signing, and
+release evidence and the remaining physical-device acceptance.
