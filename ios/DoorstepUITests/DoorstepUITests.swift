@@ -31,7 +31,17 @@ import XCTest
   func testPackagesSearchFilterAndDetail() {
     launch()
     XCTAssertTrue(app.staticTexts["Schoolhouse"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["packageFilter"].label.hasPrefix("On the way"))
+    XCTAssertFalse(app.staticTexts["Cometeer"].exists)
     screenshot("packages")
+    app.buttons["packageFilter"].tap()
+    let first = app.buttons["On the way (2)"]
+    let last = app.buttons["All packages (3)"]
+    XCTAssertTrue(first.exists)
+    XCTAssertTrue(last.exists)
+    XCTAssertLessThan(first.frame.minY, last.frame.minY)
+    screenshot("package-filter-order")
+    last.tap()
     let search = app.searchFields.firstMatch
     search.tap()
     search.typeText("Cometeer")

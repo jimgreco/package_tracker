@@ -55,11 +55,11 @@ struct Shipment: Codable, Identifiable, Equatable, Sendable {
   }
 }
 enum PackageFilter: String, CaseIterable, Identifiable {
-  case all = "All packages"
   case onTheWay = "On the way"
   case delivered = "Delivered"
   case attention = "Needs attention"
   case dismissed = "Dismissed"
+  case all = "All packages"
   var id: String { rawValue }
   func includes(_ s: Shipment) -> Bool {
     guard s.archivedAt == nil else { return false }

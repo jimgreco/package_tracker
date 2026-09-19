@@ -2,7 +2,7 @@ import SwiftUI
 
 struct PackagesView: View {
   @Environment(AppStore.self) private var store
-  @State private var filter = PackageFilter.all
+  @State private var filter = PackageFilter.onTheWay
   @State private var search = ""
   @State private var adding = false
   var body: some View {

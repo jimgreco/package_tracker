@@ -54,7 +54,7 @@ type View = "packages" | "calendar" | "inbox" | "settings";
 export default function Page() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [view, setView] = useState<View>("packages");
-  const [filter, setFilter] = useState("All packages");
+  const [filter, setFilter] = useState("On the way");
   const [search, setSearch] = useState("");
   const [initialError, setInitialError] = useState("");
   const [auth, setAuth] = useState(false);
@@ -408,11 +408,11 @@ export default function Page() {
                       <div className="toolbar">
                         <div className="tabs" aria-label="Filter packages">
                           {[
-                            "All packages",
                             "On the way",
                             "Delivered",
                             "Needs attention",
                             "Dismissed",
+                            "All packages",
                           ].map((t) => (
                             <button
                               key={t}
