@@ -6,6 +6,28 @@ export function trackingCarrier(carrier: string | null) {
   return value && fedexCarrierPattern.test(value) ? "FedEx" : value;
 }
 
+// Shopify order emails can change the displayed order number. The order-page
+// path stays stable; authentication and marketing query parameters do not.
+// This identifies an order, never an individual package or a carrier tracker.
+export function orderPageReference(links: string[]) {
+  const refs = new Set<string>();
+  for (const link of links) {
+    try {
+      const url = new URL(link);
+      if (
+        url.protocol === "https:" &&
+        !url.username &&
+        !url.password &&
+        /^\/\d+\/orders\/[a-f0-9]{32}\/authenticate$/.test(url.pathname)
+      )
+        refs.add(url.origin + url.pathname);
+    } catch {
+      /* Invalid source links provide no identity evidence. */
+    }
+  }
+  return refs.size === 1 ? [...refs][0] : null;
+}
+
 // CDL embeds the package's tracking code in this link, even when the email
 // never prints it separately. Only use the selected, source-backed package URL.
 export function trackingCodeFromLink(

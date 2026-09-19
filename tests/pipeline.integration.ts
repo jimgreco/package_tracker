@@ -1248,3 +1248,172 @@ test("CDL link-only updates and later tracking numbers stay one package, while s
     { tracking_number: "CDLFIXTURE2", status: "in_transit" },
   ]);
 });
+
+const orderPageFixture =
+  "https://coffee.example.invalid/123/orders/0123456789abcdef0123456789abcdef/authenticate";
+async function orderPageEmail(
+  key: string,
+  number: string,
+  status: string,
+  page: string,
+  code: string | null = null,
+  householdId = ctx.householdId,
+) {
+  const link = code
+    ? `https://apps.cdldelivers.com/Tracking-Page/track?id=${code}`
+    : null;
+  const email = await receiveEmail(householdId, {
+    messageId: key,
+    from: "coffee@example.invalid",
+    subject: "Coffee order update",
+    text: `Order ${number}: ${status}. ${page ? page + "?key=" + key : ""} ${link || ""}`,
+    html: "",
+    sentAt: "2026-09-13T12:00:00Z",
+  });
+  const parsed = extraction(null, status, "2026-09-20", ["Coffee"]);
+  parsed.orders[0].merchant = "Coffee fixture";
+  parsed.orders[0].orderNumber = number;
+  parsed.orders[0].shipments[0].trackingUrl = link;
+  if (status === "delivered")
+    parsed.orders[0].shipments[0].deliveredAt = "2026-09-13T12:00:00Z";
+  await applyExtraction(email.id, parsed);
+  return { email, parsed };
+}
+
+test("shared order pages reconcile changed order numbers and untracked shipping notices without merging split packages", async () => {
+  await orderPageEmail("page:confirmed", "700100", "ordered", orderPageFixture);
+  const [original] = await query(
+    "SELECT s.* FROM shipments s JOIN orders o ON o.id=s.order_id WHERE o.household_id=$1 AND o.order_number='700100'",
+    [ctx.householdId],
+  );
+  await orderPageEmail("page:shipped", "700100", "in_transit", "");
+  await orderPageEmail(
+    "page:today",
+    "T700100",
+    "out_for_delivery",
+    orderPageFixture,
+    "CDLPAGE1",
+  );
+  const delivered = await orderPageEmail(
+    "page:delivered",
+    "T700100",
+    "delivered",
+    orderPageFixture,
+    "CDLPAGE1",
+  );
+  await applyExtraction(delivered.email.id, delivered.parsed);
+  const rows = await query(
+    "SELECT s.id,s.status,s.tracking_number,o.order_number FROM shipments s JOIN orders o ON o.id=s.order_id WHERE o.household_id=$1 AND o.order_number=ANY($2::text[])",
+    [ctx.householdId, ["700100", "T700100"]],
+  );
+  assert.deepEqual(rows, [
+    {
+      id: original.id,
+      status: "delivered",
+      tracking_number: "CDLPAGE1",
+      order_number: "700100",
+    },
+  ]);
+  const [history] = await query(
+    "SELECT count(DISTINCT se.email_id)::int emails,count(DISTINCT te.id)::int events FROM shipment_emails se JOIN tracking_events te ON te.shipment_id=se.shipment_id WHERE se.shipment_id=$1",
+    [original.id],
+  );
+  assert.deepEqual(history, { emails: 4, events: 4 });
+
+  await orderPageEmail(
+    "page:split",
+    "T700100",
+    "in_transit",
+    orderPageFixture,
+    "CDLPAGE2",
+  );
+  assert.deepEqual(
+    await query(
+      "SELECT tracking_number,status FROM shipments WHERE order_id=$1 ORDER BY tracking_number",
+      [original.order_id],
+    ),
+    [
+      { tracking_number: "CDLPAGE1", status: "delivered" },
+      { tracking_number: "CDLPAGE2", status: "in_transit" },
+    ],
+  );
+});
+
+test("order-page matching requires the same household and exact page, and does not guess among shipments", async () => {
+  const page = orderPageFixture.replace("/123/", "/456/");
+  await orderPageEmail("page:distinct", "700200", "in_transit", page);
+  await orderPageEmail(
+    "page:different-url",
+    "T700200",
+    "out_for_delivery",
+    page.replace("/456/", "/789/"),
+    "CDLPAGE3",
+  );
+  const distinct = await query(
+    "SELECT s.order_id,s.status FROM shipments s JOIN orders o ON o.id=s.order_id WHERE o.household_id=$1 AND o.order_number=ANY($2::text[])",
+    [ctx.householdId, ["700200", "T700200"]],
+  );
+  assert.equal(new Set(distinct.map((s) => s.order_id)).size, 2);
+  assert.ok(distinct.some((s) => s.status === "in_transit"));
+
+  const [other] = await query(
+    "INSERT INTO households(name,forwarding_token,feed_token) VALUES('Order page isolation',$1,$2) RETURNING id",
+    [randomToken(), randomToken()],
+  );
+  await orderPageEmail(
+    "page:other-household",
+    "T700200",
+    "out_for_delivery",
+    page,
+    "CDLPAGE4",
+    other.id,
+  );
+  const [isolated] = await query(
+    "SELECT status FROM shipments WHERE household_id=$1",
+    [other.id],
+  );
+  assert.equal(isolated.status, "out_for_delivery");
+  assert.equal(
+    (
+      await query("SELECT status FROM shipments WHERE order_id=$1", [
+        distinct.find((s) => s.status === "in_transit")!.order_id,
+      ])
+    )[0].status,
+    "in_transit",
+  );
+
+  const ambiguousPage = orderPageFixture.replace("/123/", "/999/");
+  await orderPageEmail(
+    "page:ambiguous-first",
+    "700300",
+    "in_transit",
+    ambiguousPage,
+  );
+  await orderPageEmail(
+    "page:ambiguous-second",
+    "700300",
+    "in_transit",
+    ambiguousPage,
+  );
+  await orderPageEmail(
+    "page:ambiguous-tracked",
+    "T700300",
+    "out_for_delivery",
+    ambiguousPage,
+    "CDLPAGE5",
+  );
+  const ambiguous = await query(
+    "SELECT s.status,s.tracking_number FROM shipments s JOIN orders o ON o.id=s.order_id WHERE o.household_id=$1 AND o.order_number='700300'",
+    [ctx.householdId],
+  );
+  assert.equal(
+    ambiguous.filter(
+      (s) => s.tracking_number === null && s.status === "in_transit",
+    ).length,
+    2,
+  );
+  assert.equal(
+    ambiguous.filter((s) => s.tracking_number === "CDLPAGE5").length,
+    1,
+  );
+});

@@ -10,6 +10,7 @@ import { safeImageDownload, storeImage } from "./storage";
 import type { Item } from "./types";
 import type { PoolClient } from "pg";
 import {
+  orderPageReference,
   retailerReference,
   trackingCarrier,
   trackingCodeFromLink,
@@ -317,6 +318,31 @@ export async function applyExtraction(emailId: string, input: Extracted) {
           [e.household_id, merchantKey, o.orderNumber],
         )
       ).rows[0];
+      let matchedOrderPage = false;
+      const orderPage =
+        orders.length === 1 ? orderPageReference(e.links) : null;
+      if (orderPage) {
+        const candidates = (
+          await c.query(
+            `SELECT o.*,previous.links FROM orders o
+             JOIN shipments s ON s.order_id=o.id AND s.household_id=o.household_id
+             JOIN shipment_emails se ON se.shipment_id=s.id
+             JOIN source_emails previous ON previous.id=se.email_id AND previous.household_id=o.household_id
+             WHERE o.household_id=$1 AND o.merchant_key=$2
+               AND o.created_at>now()-interval '120 days'
+               AND s.archived_at IS NULL
+               AND jsonb_array_length(previous.extraction->'orders')=1`,
+            [e.household_id, merchantKey],
+          )
+        ).rows.filter(
+          (candidate) => orderPageReference(candidate.links) === orderPage,
+        );
+        const ids = new Set(candidates.map((candidate) => candidate.id));
+        if (ids.size === 1 && (!order || ids.has(order.id))) {
+          order ||= candidates[0];
+          matchedOrderPage = true;
+        }
+      }
       // Shipping updates can omit the order number; use a source-backed package identity.
       if (!order) {
         for (const s of o.shipments) {
@@ -411,6 +437,33 @@ export async function applyExtraction(emailId: string, input: Extracted) {
           )
         ).rows;
         if (!existing && pending.length === 1) existing = pending[0];
+        // An earlier shipping notice may have no package identity yet. Promote
+        // it only with the same source order page and one possible package.
+        if (
+          !existing &&
+          known.length === 0 &&
+          matchedOrderPage &&
+          o.shipments.length === 1 &&
+          (tracking || reference) &&
+          s.status !== "ordered"
+        ) {
+          const active = (
+            await c.query(
+              "SELECT * FROM shipments WHERE household_id=$1 AND order_id=$2 AND archived_at IS NULL AND dismissed_at IS NULL FOR UPDATE",
+              [e.household_id, order.id],
+            )
+          ).rows;
+          const candidate = active.length === 1 ? active[0] : null;
+          if (
+            candidate &&
+            !candidate.tracking_number &&
+            !candidate.retailer_reference &&
+            !candidate.tracking_url &&
+            !candidate.tracker_id &&
+            ["in_transit", "out_for_delivery"].includes(candidate.status)
+          )
+            existing = candidate;
+        }
         if (!tracking && !reference && s.status === "ordered" && !existing) {
           const shipped = (
             await c.query("SELECT id FROM shipments WHERE order_id=$1", [

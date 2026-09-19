@@ -1,10 +1,38 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  orderPageReference,
   retailerReference,
   trackingCarrier,
   trackingCodeFromLink,
 } from "../lib/tracking-identity";
+
+test("order-page identity ignores query secrets and rejects ambiguous order links", () => {
+  const page =
+    "https://shop.example.invalid/123/orders/0123456789abcdef0123456789abcdef/authenticate";
+  assert.equal(
+    orderPageReference([page + "?key=one", page + "?key=two&syclid=click"]),
+    page,
+  );
+  assert.equal(
+    orderPageReference([page, page.replace("/123/", "/456/")]),
+    null,
+  );
+  assert.notEqual(
+    orderPageReference([
+      page.replace("shop.example.invalid", "another.example.invalid"),
+    ]),
+    page,
+  );
+  for (const invalid of [
+    page.replace("https:", "http:"),
+    page.replace("https://", "https://user:password@"),
+    page.replace("/authenticate", "/account"),
+    "https://shop.example.invalid/account/orders",
+    "invalid URL",
+  ])
+    assert.equal(orderPageReference([invalid]), null);
+});
 
 test("CDL tracking codes require an exact source-backed package link", () => {
   const link =
