@@ -112,7 +112,6 @@ jobs:
       - name: Export IPA
         run: |
           xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/Doorstep.xcarchive" \
-            -derivedDataPath "$RUNNER_TEMP/Doorstep-derived" \
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
             -exportPath "$RUNNER_TEMP/export" \
             -authenticationKeyPath "$APP_STORE_CONNECT_API_KEY_PATH" \

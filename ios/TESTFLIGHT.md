@@ -43,8 +43,9 @@ at least the commit count and greater than every prior uploaded integer build.
 - Apple team: `V6JPQCD336`; bundle and callback scheme: `com.jimgreco.doorstep`.
 - Version: 1.0; minimum iOS 18.0; one iPhone app target, no extension or additional
   signing capabilities. Google login uses the server's existing web OAuth flow.
-- App Store Connect record and Owner internal group are configured during setup.
-  Enable automatic distribution for the Owner group; add only the account owner.
+- App Store Connect: [Doorstep Package Tracker, 6813927476](https://appstoreconnect.apple.com/apps/6813927476/testflight/ios).
+  The explicit identifier and Owner internal group were created on Apple’s website;
+  automatic distribution is enabled. Add only the account owner as an internal tester.
 - Standard system encryption is declared in `ITSAppUsesNonExemptEncryption=false`.
 - Repository: `jimgreco/package_tracker`; environment: `production`, restricted to
   branch `main`. Its six signing secret names match the sister projects:
