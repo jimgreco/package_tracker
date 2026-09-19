@@ -9,7 +9,11 @@ import { normalizeEstimate } from "./calendar";
 import { safeImageDownload, storeImage } from "./storage";
 import type { Item } from "./types";
 import type { PoolClient } from "pg";
-import { retailerReference, trackingCarrier } from "./tracking-identity";
+import {
+  retailerReference,
+  trackingCarrier,
+  trackingCodeFromLink,
+} from "./tracking-identity";
 import { trackingConfigured } from "./tracking-config";
 const dateValue = (v: string | null) =>
   v && Number.isFinite(Date.parse(v)) ? new Date(v).toISOString() : null;
@@ -276,6 +280,7 @@ export async function applyExtraction(emailId: string, input: Extracted) {
     for (const s of o.shipments) {
       s.items = await cleanItems(s.items);
       s.carrier = trackingCarrier(s.carrier);
+      s.trackingNumber ||= trackingCodeFromLink(source.links, s.trackingUrl);
     }
   }
   await transaction(async (c) => {

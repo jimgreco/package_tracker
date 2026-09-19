@@ -1170,3 +1170,81 @@ test("FedEx-only scheduling includes due packages and skips unsupported, termina
     for (const row of [delivered, dismissed, checked])
       assert.ok(!jobs.some((j) => j.id === row.id));
   }));
+
+test("CDL link-only updates and later tracking numbers stay one package, while split packages remain distinct", async () => {
+  const link =
+    "https://apps.cdldelivers.com/Tracking-Page/track?id=CDLFIXTURE1";
+  const first = await incoming(
+    "cdl-link:first",
+    `Your coffee is out for delivery. ${link}`,
+  );
+  const initial = extraction(null, "out_for_delivery", "2026-09-20", [
+    "Coffee",
+  ]);
+  initial.orders[0].orderNumber = "cdl-link-order";
+  initial.orders[0].shipments[0].trackingUrl = link;
+  await applyExtraction(first.id, initial);
+  const [before] = await query(
+    "SELECT * FROM shipments WHERE household_id=$1 AND tracking_number='CDLFIXTURE1'",
+    [ctx.householdId],
+  );
+  assert.ok(before);
+  assert.equal(before.status, "out_for_delivery");
+
+  const second = await incoming(
+    "cdl-link:delivered",
+    `Your coffee capsules have been delivered. ${link}`,
+  );
+  const delivered = extraction("CDLFIXTURE1", "delivered", "2026-09-20", [
+    "Coffee capsules",
+  ]);
+  delivered.orders[0].orderNumber = "cdl-link-order";
+  delivered.orders[0].shipments[0].carrier = null;
+  delivered.orders[0].shipments[0].trackingUrl = link;
+  delivered.orders[0].shipments[0].statusAt = "2026-09-13T18:00:00Z";
+  delivered.orders[0].shipments[0].deliveredAt = "2026-09-13T18:00:00Z";
+  await applyExtraction(second.id, delivered);
+  await applyExtraction(second.id, delivered);
+  const saved = await query("SELECT * FROM shipments WHERE order_id=$1", [
+    before.order_id,
+  ]);
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].id, before.id);
+  assert.equal(saved[0].status, "delivered");
+  assert.equal(
+    (
+      await query(
+        "SELECT count(*)::int n FROM shipment_emails WHERE shipment_id=$1",
+        [before.id],
+      )
+    )[0].n,
+    2,
+  );
+  assert.equal(
+    (
+      await query(
+        "SELECT count(*)::int n FROM tracking_events WHERE shipment_id=$1 AND event_key LIKE 'email:%'",
+        [before.id],
+      )
+    )[0].n,
+    2,
+  );
+
+  const splitLink = link.replace("CDLFIXTURE1", "CDLFIXTURE2");
+  const splitEmail = await incoming(
+    "cdl-link:split",
+    `A second package is on the way. ${splitLink}`,
+  );
+  const split = extraction(null, "in_transit");
+  split.orders[0].orderNumber = "cdl-link-order";
+  split.orders[0].shipments[0].trackingUrl = splitLink;
+  await applyExtraction(splitEmail.id, split);
+  const all = await query(
+    "SELECT tracking_number,status FROM shipments WHERE order_id=$1 ORDER BY tracking_number",
+    [before.order_id],
+  );
+  assert.deepEqual(all, [
+    { tracking_number: "CDLFIXTURE1", status: "delivered" },
+    { tracking_number: "CDLFIXTURE2", status: "in_transit" },
+  ]);
+});

@@ -1,6 +1,28 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { retailerReference, trackingCarrier } from "../lib/tracking-identity";
+import {
+  retailerReference,
+  trackingCarrier,
+  trackingCodeFromLink,
+} from "../lib/tracking-identity";
+
+test("CDL tracking codes require an exact source-backed package link", () => {
+  const link =
+    "https://apps.cdldelivers.com/Tracking-Page/track?id=CDLFIXTURE1";
+  assert.equal(trackingCodeFromLink([link], link), "CDLFIXTURE1");
+  assert.equal(trackingCodeFromLink([], link), null);
+  assert.equal(trackingCodeFromLink([link], null), null);
+  for (const invalid of [
+    link.replace("apps.cdldelivers.com", "apps.cdldelivers.com.evil.invalid"),
+    link.replace("https:", "http:"),
+    link.replace("https://", "https://user:password@"),
+    link.replace("/Tracking-Page/track", "/orders"),
+    link.replace("CDLFIXTURE1", "ORDER1"),
+    link + "&id=CDLFIXTURE2",
+    "invalid URL",
+  ])
+    assert.equal(trackingCodeFromLink([invalid], invalid), null);
+});
 
 test("FedEx service names resolve to the carrier API identifier", () => {
   for (const carrier of [
