@@ -38,6 +38,7 @@ elif sys.argv[1] == 'archive':
     assert info['DoorstepAPIOrigin'] == 'https://packages.jim-greco.com'
     assert not info.get('NSAppTransportSecurity'), 'Release must not contain transport exceptions.'
     assert info['MinimumOSVersion'] == '18.0'
+    assert info['UIDeviceFamily'] == [1], 'Doorstep is an iPhone app; target settings must override XcodeGen defaults.'
     binary = (app / 'Doorstep').read_bytes()
     assert b'--fixture' not in binary and b'Sample household' not in binary, 'Fixtures must be absent from Release.'
     subprocess.run(['codesign', '--verify', '--deep', '--strict', str(app)], check=True)
