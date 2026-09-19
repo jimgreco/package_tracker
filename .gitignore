@@ -17,3 +17,4 @@ ios/**/*.xcuserstate
 ios/**/xcuserdata/
 *.xcresult/
 output/ios/
+ios/Doorstep [0-9]*.xcodeproj/
