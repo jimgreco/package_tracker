@@ -25,6 +25,9 @@ struct Shipment: Codable, Identifiable, Equatable, Sendable {
   var status: String
   var shippedAt: String?
   var estimate: Estimate?
+  var collectedAt: String?
+  var collectedByName: String?
+  var attentionReasons: [String]?
   var deliveredAt: String?
   var createdAt: String
   var timelineAt: String
@@ -73,7 +76,7 @@ enum PackageFilter: String, CaseIterable, Identifiable {
         "available_for_pickup", "failure",
       ].contains(s.status)
     case .delivered: return s.status == "delivered"
-    case .attention: return s.needsReview || ["failure", "delayed", "unknown"].contains(s.status)
+    case .attention: return s.attentionReasons.map { !$0.isEmpty } ?? (s.needsReview || ["failure", "delayed", "unknown"].contains(s.status))
     case .dismissed: return false
     }
   }

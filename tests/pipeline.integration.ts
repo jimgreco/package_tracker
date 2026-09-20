@@ -65,6 +65,7 @@ before(async () => {
     "007_dismissed.sql",
     "008_retailer_reference.sql",
     "009_native_sessions.sql",
+    "010_delivery_features.sql",
   ])
     await query(await readFile("db/" + file, "utf8"));
   const [h] = await query(
@@ -1417,4 +1418,405 @@ test("order-page matching requires the same household and exact page, and does n
     ambiguous.filter((s) => s.tracking_number === "CDLPAGE5").length,
     1,
   );
+});
+
+test("collection is household-scoped, idempotent, reversible, and independent of delivery", async () => {
+  const id = await saveManual(
+    {
+      orderNumber: null,
+      orderedAt: null,
+      carrier: null,
+      trackingNumber: null,
+      trackingUrl: null,
+      shippedAt: null,
+      estimate: null,
+      deliveredAt: null,
+      merchant: "Collection fixture",
+      items: [{ name: "Parcel", quantity: 1, imageUrl: null }],
+      status: "delivered",
+    },
+    ctx,
+  );
+  await assert.rejects(
+    quickShipmentAction(id, { ...ctx, householdId: randomUUID() }, "collect"),
+    /not found/,
+  );
+  await Promise.all([
+    quickShipmentAction(id, ctx, "collect"),
+    quickShipmentAction(id, ctx, "collect"),
+  ]);
+  const first = (await shipment(id, ctx.householdId)).shipment;
+  assert.ok(first.collectedAt);
+  assert.equal(first.collectedByName, "Tester");
+  assert.equal(first.status, "delivered");
+  assert.equal(first.deliveredAt, null);
+  assert.equal(
+    (
+      await query(
+        "SELECT * FROM tracking_events WHERE shipment_id=$1 AND event_key LIKE 'collection:%'",
+        [id],
+      )
+    ).length,
+    1,
+  );
+  await quickShipmentAction(id, ctx, "uncollect");
+  assert.equal(
+    (await shipment(id, ctx.householdId)).shipment.collectedAt,
+    null,
+  );
+  await saveManual(
+    {
+      orderNumber: null,
+      orderedAt: null,
+      carrier: null,
+      trackingNumber: null,
+      trackingUrl: null,
+      shippedAt: null,
+      estimate: null,
+      deliveredAt: null,
+      merchant: "Collection fixture",
+      items: [{ name: "Parcel", quantity: 1, imageUrl: null }],
+      status: "in_transit",
+    },
+    ctx,
+    id,
+  );
+  await assert.rejects(
+    quickShipmentAction(id, ctx, "collect"),
+    /Only delivered/,
+  );
+});
+
+test("push transitions dedupe, honor preferences, retry safely, and reject removed memberships", async () => {
+  const { registerDevice, saveNotificationSettings, deliverPush } =
+    await import("../lib/notifications");
+  const sessionHash = "push-fixture-session";
+  await query(
+    "INSERT INTO native_sessions(token_hash,user_id,expires_at) VALUES($1,$2,now()+interval '1 hour')",
+    [sessionHash, ctx.userId],
+  );
+  const native = { ...ctx, nativeSessionHash: sessionHash };
+  const prefs = {
+    enabled: true,
+    outForDelivery: true,
+    delivered: true,
+    pickup: true,
+    problems: true,
+  };
+  await registerDevice(native, {
+    token: "a".repeat(64),
+    environment: "sandbox",
+  });
+  await saveNotificationSettings(native, prefs);
+  const id = await saveManual(
+    {
+      orderNumber: null,
+      orderedAt: null,
+      carrier: null,
+      trackingNumber: null,
+      trackingUrl: null,
+      shippedAt: null,
+      estimate: null,
+      deliveredAt: null,
+      merchant: "Push fixture",
+      items: [{ name: "Parcel", quantity: 1, imageUrl: null }],
+      status: "in_transit",
+    },
+    ctx,
+  );
+  await query(
+    "UPDATE shipments SET status='out_for_delivery',status_at=now(),version=version+1 WHERE id=$1",
+    [id],
+  );
+  await query(
+    "UPDATE shipments SET status='out_for_delivery',version=version+1 WHERE id=$1",
+    [id],
+  );
+  const deliveries = await query(
+    "SELECT * FROM push_deliveries WHERE shipment_id=$1",
+    [id],
+  );
+  assert.equal(deliveries.length, 1);
+  let attempts = 0;
+  await assert.rejects(
+    deliverPush(deliveries[0].id, async () => {
+      attempts++;
+      return { status: 503 };
+    }),
+    /503/,
+  );
+  assert.equal(
+    (
+      await query("SELECT status FROM push_deliveries WHERE id=$1", [
+        deliveries[0].id,
+      ])
+    )[0].status,
+    "pending",
+  );
+  await deliverPush(deliveries[0].id, async () => {
+    attempts++;
+    return { status: 200 };
+  });
+  await deliverPush(deliveries[0].id, async () => {
+    attempts++;
+    return { status: 200 };
+  });
+  assert.equal(attempts, 2);
+  await saveNotificationSettings(native, { ...prefs, delivered: false });
+  await quickShipmentAction(id, ctx, "deliver");
+  assert.equal(
+    (await query("SELECT * FROM push_deliveries WHERE shipment_id=$1", [id]))
+      .length,
+    1,
+  );
+  await saveNotificationSettings(native, prefs);
+  const second = await saveManual(
+    {
+      orderNumber: null,
+      orderedAt: null,
+      carrier: null,
+      trackingNumber: null,
+      trackingUrl: null,
+      shippedAt: null,
+      estimate: null,
+      deliveredAt: null,
+      merchant: "Another push",
+      items: [{ name: "Parcel", quantity: 1, imageUrl: null }],
+      status: "in_transit",
+    },
+    ctx,
+  );
+  await quickShipmentAction(second, ctx, "deliver");
+  const [queued] = await query(
+    "SELECT * FROM push_deliveries WHERE shipment_id=$1",
+    [second],
+  );
+  await saveNotificationSettings(native, { ...prefs, enabled: false });
+  await deliverPush(queued.id, async () => {
+    throw new Error("Disabled preferences must never send");
+  });
+  assert.equal(
+    (
+      await query("SELECT status FROM push_deliveries WHERE id=$1", [queued.id])
+    )[0].status,
+    "skipped",
+  );
+  await saveNotificationSettings(native, prefs);
+  const third = await saveManual(
+    {
+      orderNumber: null,
+      orderedAt: null,
+      carrier: null,
+      trackingNumber: null,
+      trackingUrl: null,
+      shippedAt: null,
+      estimate: null,
+      deliveredAt: null,
+      merchant: "Removed membership",
+      items: [{ name: "Parcel", quantity: 1, imageUrl: null }],
+      status: "delivered",
+    },
+    ctx,
+  );
+  const [removed] = await query(
+    "SELECT * FROM push_deliveries WHERE shipment_id=$1",
+    [third],
+  );
+  await query(
+    "DELETE FROM household_members WHERE household_id=$1 AND user_id=$2",
+    [ctx.householdId, ctx.userId],
+  );
+  await deliverPush(removed.id, async () => {
+    throw new Error("Removed members must never receive pushes");
+  });
+  assert.equal(
+    (
+      await query("SELECT status FROM push_deliveries WHERE id=$1", [
+        removed.id,
+      ])
+    )[0].status,
+    "skipped",
+  );
+  await query(
+    "INSERT INTO household_members(household_id,user_id,role) VALUES($1,$2,'owner')",
+    [ctx.householdId, ctx.userId],
+  );
+  await query("DELETE FROM native_sessions WHERE token_hash=$1", [sessionHash]);
+  assert.equal(
+    (
+      await query("SELECT * FROM push_devices WHERE session_hash=$1", [
+        sessionHash,
+      ])
+    ).length,
+    0,
+  );
+});
+
+test("attention alerts do not repeat and resolved or collected packages suppress queued pushes", async () => {
+  const {
+    registerDevice,
+    saveNotificationSettings,
+    scheduleNotifications,
+    deliverPush,
+  } = await import("../lib/notifications");
+  const native = { ...ctx, nativeSessionHash: "attention-push-session" };
+  await query(
+    "INSERT INTO native_sessions(token_hash,user_id,expires_at) VALUES($1,$2,now()+interval '1 hour')",
+    [native.nativeSessionHash, ctx.userId],
+  );
+  await registerDevice(native, {
+    token: "b".repeat(64),
+    environment: "sandbox",
+  });
+  await saveNotificationSettings(native, {
+    enabled: true,
+    outForDelivery: true,
+    delivered: true,
+    pickup: true,
+    problems: true,
+  });
+  const id = await saveManual(
+    {
+      merchant: "Stalled test",
+      items: [{ name: "Parcel", quantity: 1, imageUrl: null }],
+      status: "ordered",
+      orderNumber: null,
+      orderedAt: null,
+      carrier: null,
+      trackingNumber: null,
+      trackingUrl: null,
+      shippedAt: null,
+      estimate: null,
+      deliveredAt: null,
+    },
+    ctx,
+  );
+  await query(
+    "UPDATE shipments SET created_at=now()-interval '8 days' WHERE id=$1",
+    [id],
+  );
+  await scheduleNotifications();
+  await scheduleNotifications();
+  const alerts = await query(
+    "SELECT * FROM push_deliveries WHERE shipment_id=$1",
+    [id],
+  );
+  assert.equal(alerts.length, 1);
+  await query(
+    "UPDATE shipments SET shipped_at=now(),status='in_transit',version=version+1 WHERE id=$1",
+    [id],
+  );
+  await deliverPush(alerts[0].id, async () => {
+    throw new Error("Resolved attention must not send");
+  });
+  assert.equal(
+    (
+      await query("SELECT status FROM push_deliveries WHERE id=$1", [
+        alerts[0].id,
+      ])
+    )[0].status,
+    "skipped",
+  );
+  await quickShipmentAction(id, ctx, "deliver");
+  const [delivered] = await query(
+    "SELECT * FROM push_deliveries WHERE shipment_id=$1 AND category='delivered'",
+    [id],
+  );
+  await quickShipmentAction(id, ctx, "collect");
+  await deliverPush(delivered.id, async () => {
+    throw new Error("Collected package must not send");
+  });
+  assert.equal(
+    (
+      await query("SELECT status FROM push_deliveries WHERE id=$1", [
+        delivered.id,
+      ])
+    )[0].status,
+    "skipped",
+  );
+  await query("DELETE FROM native_sessions WHERE token_hash=$1", [
+    native.nativeSessionHash,
+  ]);
+});
+
+test("device registration requires native auth and reassignment discards old login deliveries", async () => {
+  const { registerDevice, saveNotificationSettings, deliverPush } =
+    await import("../lib/notifications");
+  const device = { token: "c".repeat(64), environment: "sandbox" };
+  await assert.rejects(registerDevice(ctx, device), /iPhone app/);
+  for (const key of ["old-device-session", "new-device-session"])
+    await query(
+      "INSERT INTO native_sessions(token_hash,user_id,expires_at) VALUES($1,$2,now()+interval '1 hour')",
+      [key, ctx.userId],
+    );
+  await registerDevice(
+    { ...ctx, nativeSessionHash: "old-device-session" },
+    device,
+  );
+  await saveNotificationSettings(ctx, {
+    enabled: true,
+    outForDelivery: true,
+    delivered: true,
+    pickup: true,
+    problems: true,
+  });
+  const id = await saveManual(
+    {
+      merchant: "Device test",
+      items: [{ name: "Parcel", quantity: 1, imageUrl: null }],
+      status: "delivered",
+      orderNumber: null,
+      orderedAt: null,
+      carrier: null,
+      trackingNumber: null,
+      trackingUrl: null,
+      shippedAt: null,
+      estimate: null,
+      deliveredAt: null,
+    },
+    ctx,
+  );
+  assert.equal(
+    (await query("SELECT * FROM push_deliveries WHERE shipment_id=$1", [id]))
+      .length,
+    1,
+  );
+  await registerDevice(
+    { ...ctx, nativeSessionHash: "new-device-session" },
+    device,
+  );
+  assert.equal(
+    (await query("SELECT * FROM push_deliveries WHERE shipment_id=$1", [id]))
+      .length,
+    0,
+  );
+  await query(
+    "UPDATE shipments SET status='out_for_delivery',status_at=now()-interval '2 days',version=version+1 WHERE id=$1",
+    [id],
+  );
+  assert.equal(
+    (await query("SELECT * FROM push_deliveries WHERE shipment_id=$1", [id]))
+      .length,
+    0,
+  );
+  await query(
+    "UPDATE shipments SET status='delivered',status_at=now(),version=version+1 WHERE id=$1",
+    [id],
+  );
+  const [queued] = await query(
+    "SELECT * FROM push_deliveries WHERE shipment_id=$1",
+    [id],
+  );
+  await deliverPush(queued.id, async () => ({
+    status: 410,
+    reason: "Unregistered",
+  }));
+  assert.equal(
+    (await query("SELECT * FROM push_devices WHERE token=$1", [device.token]))
+      .length,
+    0,
+  );
+  await query("DELETE FROM native_sessions WHERE token_hash=ANY($1::text[])", [
+    ["old-device-session", "new-device-session"],
+  ]);
 });

@@ -26,7 +26,8 @@ struct PackagesView: View {
           }.accessibilityIdentifier("packageFilter")
         }
         if filter == .attention {
-          Text("Delivery problems or package details that need your review.").font(.footnote)
+          Text("Missed estimates, stalled orders, tracking problems, or details that need review.")
+            .font(.footnote)
             .foregroundStyle(.secondary)
         }
         let today = store.shipments.filter {
@@ -64,6 +65,12 @@ struct PackagesView: View {
             }
           }
           .swipeActions(edge: .leading, allowsFullSwipe: false) {
+            if shipment.status == "delivered" && shipment.dismissedAt == nil
+              && shipment.collectedAt == nil
+            {
+              Button("Collect") { Task { await store.action(shipment, "collect") } }.tint(.green)
+                .disabled(!store.canWrite)
+            }
             if shipment.canDeliver {
               Button("Mark delivered") { Task { await store.action(shipment, "deliver") } }.tint(
                 .green
@@ -102,8 +109,11 @@ struct PackageRow: View {
         if let number = shipment.orderNumber {
           Text("Order \(number)").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
         }
-        if shipment.needsReview || ["failure", "delayed"].contains(shipment.status) {
-          Text(shipment.reviewReason ?? PackageStatus.label(shipment.status)).font(.caption)
+        if shipment.collectedAt != nil {
+          Text("Collected by \(shipment.collectedByName ?? "a household member")").font(.caption)
+        }
+        if let reason = shipment.attentionReasons?.first ?? shipment.reviewReason {
+          Text(reason).font(.caption)
             .foregroundStyle(.secondary)
         }
       }

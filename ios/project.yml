@@ -23,6 +23,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jimgreco.doorstep
+        CODE_SIGN_ENTITLEMENTS: Doorstep/Doorstep.entitlements
         TARGETED_DEVICE_FAMILY: '1'
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: Doorstep/Info.plist
@@ -30,8 +31,10 @@ targets:
         DOORSTEP_API_ORIGIN: https://packages.jim-greco.com
       configs:
         Debug:
+          APNS_ENVIRONMENT: development
           INFOPLIST_FILE: Doorstep/Info-Debug.plist
         Release:
+          APNS_ENVIRONMENT: production
           INFOPLIST_FILE: Doorstep/Info.plist
     scheme:
       testTargets: [DoorstepTests, DoorstepUITests]

@@ -229,3 +229,52 @@ household records, with Google-only native login, package editing, inbox, and
 settings. Gmail and Calendar connections remain managed on the website. See the
 [iPhone verification record](ios/VERIFICATION.md) for simulator, signing, and
 release evidence and the remaining physical-device acceptance.
+
+## Delivery alerts, attention, and collection
+
+The **Needs attention** filter on web and iPhone explains missed delivery estimates,
+orders or labels with no shipment confirmation after seven days, tracking errors or
+unsupported/unconfigured tracking, and stale checks (one hour for out-for-delivery,
+12 hours otherwise). Date ranges remain valid through their inclusive final day in
+the destination time zone; approximate point estimates have a two-hour allowance.
+These signals do not change carrier status or protected estimates. Delivered,
+collected, cancelled, returned, dismissed, and archived records are excluded.
+
+For a delivered package, **Mark collected** records the current member and time.
+**Undo collection** reverses that record without changing carrier delivery history.
+Changing the package status away from delivered clears its collection state. When
+merging a collected package, keep a delivered package as the destination; the
+collection record is retained.
+
+### iPhone push notifications
+
+Preferences belong to each person in each household. Manage them in Settings on
+web or iPhone; authorize and register the device from the iPhone app. Categories
+are out for delivery, delivered, ready for pickup, and delivery problems (including
+computed attention reasons). Lock-screen messages omit merchant names, item names,
+email content, and tracking numbers. Tapping an alert opens the package, after
+checking household access. Website settings manage iPhone alerts; browser push is
+not part of this feature.
+
+Configure `APNS_KEY_ID`, `APNS_TEAM_ID`, and `APNS_PRIVATE_KEY` in the private server
+environment for both web and worker. Use an Apple **APNs signing key**, not the App
+Store Connect API key. PEM newlines can be represented with literal `\n`. Never put
+this key in Git, app resources, or images. The topic is `com.jimgreco.doorstep`.
+Debug builds use the APNs sandbox; Release/TestFlight builds use production. The
+release signing script enables the bundle's push capability and validates that the
+App Store profile has the production `aps-environment` entitlement.
+
+Status transitions create delivery records in the same database transaction.
+The worker queues delivery, retries failures, and rechecks membership, session,
+preferences, and package state before sending. Stable delivery IDs and APNs
+collapse IDs suppress retries; APNs transport cannot guarantee exactly-once display
+if a connection fails after acceptance. Alerts expire after 24 hours, and delivery
+records are removed after 30 days. Invalid device tokens are removed. Logging out
+revokes the device registration with its native session; membership removal
+removes household preferences. Existing historical statuses are not replayed when
+a device is registered.
+
+Verify on a physical iPhone with a signed build: enable alerts, authorize an actual
+tracking update, receive it while backgrounded, open the correct package, and check
+that disabling a category or removing membership prevents later alerts. Mocked
+server tests and simulator UI tests do not establish live APNs delivery.

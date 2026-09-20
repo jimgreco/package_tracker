@@ -31,6 +31,7 @@ struct SettingsView: View {
           }
           Button("Edit household") { editingHousehold = true }.disabled(!store.canWrite)
         }
+        NotificationSettingsSection()
         Section("Members") {
           ForEach(settings.members) { member in
             VStack(alignment: .leading, spacing: 5) {

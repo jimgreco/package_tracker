@@ -1,4 +1,10 @@
 import {
+  notificationSettings,
+  saveNotificationSettings,
+  registerDevice,
+  disableDevice,
+} from "@/lib/notifications";
+import {
   nativeStart,
   nativeAuthorize,
   nativeCallbackAttempt,
@@ -287,6 +293,24 @@ async function handle(
       await gmailAction(ctx, action);
       return json({ ok: true });
     }
+    if (route === "notifications/preferences" && method === "GET")
+      return json(await notificationSettings(ctx));
+    if (route === "notifications/preferences" && method === "POST") {
+      requireReal(ctx);
+      return json(
+        await saveNotificationSettings(ctx, await jsonBody(req, 4096)),
+      );
+    }
+    if (route === "notifications/device" && method === "POST") {
+      requireReal(ctx);
+      await rateLimit(`push-device:${ctx.userId}`, 60, 3600);
+      await registerDevice(ctx, await jsonBody(req, 4096));
+      return json({ ok: true });
+    }
+    if (route === "notifications/device/disable" && method === "POST") {
+      await disableDevice(ctx);
+      return json({ ok: true });
+    }
     if (route === "dashboard" && method === "GET")
       return json(await dashboard(ctx));
     if (route === "shipments" && method === "POST") {
@@ -311,13 +335,17 @@ async function handle(
         return json({ id: await saveManual(await jsonBody(req), ctx, id) });
       if (
         path.length === 3 &&
-        ["deliver", "dismiss", "restore"].includes(path[2]) &&
+        ["deliver", "dismiss", "restore", "collect", "uncollect"].includes(
+          path[2],
+        ) &&
         method === "POST"
       ) {
         await quickShipmentAction(
           id,
           ctx,
-          z.enum(["deliver", "dismiss", "restore"]).parse(path[2]),
+          z
+            .enum(["deliver", "dismiss", "restore", "collect", "uncollect"])
+            .parse(path[2]),
         );
         return json({ ok: true });
       }
@@ -355,6 +383,23 @@ async function handle(
             )
           ).rows;
           if (rows.length !== 2) throw new AppError("Package not found.", 404);
+          const source = rows.find((r) => r.id === id)!;
+          const target = rows.find((r) => r.id === targetId)!;
+          if (source.collected_at && target.status !== "delivered")
+            throw new AppError(
+              "Keep the delivered package as the merge destination to preserve its collection record.",
+            );
+          if (source.collected_at && !target.collected_at)
+            await c.query(
+              "UPDATE shipments SET collected_at=$2,collected_by=$3,collected_by_name=$4 WHERE id=$1",
+              [
+                targetId,
+                source.collected_at,
+                source.collected_by,
+                source.collected_by_name,
+              ],
+            );
+
           await c.query(
             "INSERT INTO shipment_emails(shipment_id,email_id) SELECT $2,email_id FROM shipment_emails WHERE shipment_id=$1 ON CONFLICT DO NOTHING",
             [id, targetId],
@@ -480,6 +525,7 @@ async function handle(
             exportedAt: new Date().toISOString(),
             household: { name: ctx.householdName, timeZone: ctx.timeZone },
             shipments: await shipments(ctx.householdId),
+            notificationPreferences: await notificationSettings(ctx),
             emails: await query(
               "SELECT subject,sender,sent_at,body_text,extraction FROM source_emails WHERE household_id=$1",
               [ctx.householdId],

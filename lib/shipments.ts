@@ -12,10 +12,11 @@ import { manualSchema } from "./validation";
 import { normalizeEstimate, validZone } from "./calendar";
 import { gmailAvailable } from "./gmail";
 import { trackingConfigured } from "./tracking-config";
+import { attentionReasons } from "./attention";
 const iso = (d: unknown) =>
   d instanceof Date ? d.toISOString() : typeof d === "string" ? d : null;
 export function mapShipment(r: Record<string, unknown>): Shipment {
-  return {
+  const mapped: Shipment = {
     id: r.id as string,
     orderId: r.order_id as string,
     merchant: r.merchant as string,
@@ -29,6 +30,8 @@ export function mapShipment(r: Record<string, unknown>): Shipment {
     shippedAt: iso(r.shipped_at),
     estimate: r.estimate as Shipment["estimate"],
     deliveredAt: iso(r.delivered_at),
+    collectedAt: iso(r.collected_at),
+    collectedByName: r.collected_by_name as string | null,
     createdAt: iso(r.created_at)!,
     timelineAt: iso(r.timeline_at || r.created_at)!,
     firstEmailAt: iso(r.first_email_at),
@@ -43,6 +46,7 @@ export function mapShipment(r: Record<string, unknown>): Shipment {
     manualOverride: r.manual_override as boolean,
     isDemo: r.is_demo as boolean,
   };
+  return { ...mapped, attentionReasons: attentionReasons(mapped) };
 }
 export async function shipments(
   householdId: string,
@@ -209,7 +213,7 @@ export async function detail(id: string, ctx: Context) {
 export async function quickShipmentAction(
   id: string,
   ctx: Context,
-  action: "deliver" | "dismiss" | "restore",
+  action: "deliver" | "dismiss" | "restore" | "collect" | "uncollect",
 ) {
   return transaction(async (c) => {
     await c.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
@@ -222,6 +226,30 @@ export async function quickShipmentAction(
       )
     ).rows;
     if (!existing) throw new AppError("Package not found.", 404);
+    if (action === "collect" || action === "uncollect") {
+      if (existing.status !== "delivered" || existing.dismissed_at)
+        throw new AppError(
+          "Only delivered, visible packages can be marked collected.",
+        );
+      if ((action === "collect") === !!existing.collected_at) return;
+      const [saved] = (
+        await c.query(
+          "UPDATE shipments SET collected_at=CASE WHEN $2 THEN now() ELSE NULL END,collected_by=CASE WHEN $2 THEN $3::uuid ELSE NULL END,collected_by_name=CASE WHEN $2 THEN $4 ELSE NULL END,updated_at=now(),version=version+1 WHERE id=$1 RETURNING version",
+          [id, action === "collect", ctx.userId, ctx.name],
+        )
+      ).rows;
+      await c.query(
+        "INSERT INTO tracking_events(shipment_id,event_key,status,message,occurred_at,source) VALUES($1,$2,'delivered',$3,now(),'Household')",
+        [
+          id,
+          `collection:${saved.version}`,
+          action === "collect"
+            ? `Collected by ${ctx.name}.`
+            : `Collection undone by ${ctx.name}.`,
+        ],
+      );
+      return;
+    }
     if (
       (action === "dismiss" && existing.dismissed_at) ||
       (action === "restore" && !existing.dismissed_at) ||
@@ -402,7 +430,7 @@ export async function saveManual(
     if (id) {
       saved = (
         await c.query(
-          `UPDATE shipments SET items=$1,carrier=$2,tracking_number=$3,tracking_url=$4,status=$5,shipped_at=$6,estimate=$7,delivered_at=$8,manual_override=$9,tracking_state=CASE WHEN $12 THEN $10 ELSE tracking_state END,tracker_id=CASE WHEN $12 THEN NULL ELSE tracker_id END,needs_review=false,review_reason=NULL,updated_at=now(),status_at=now(),estimate_at=now(),version=version+1 WHERE id=$11 RETURNING *`,
+          `UPDATE shipments SET collected_at=CASE WHEN $5='delivered' THEN collected_at ELSE NULL END,collected_by=CASE WHEN $5='delivered' THEN collected_by ELSE NULL END,collected_by_name=CASE WHEN $5='delivered' THEN collected_by_name ELSE NULL END,items=$1,carrier=$2,tracking_number=$3,tracking_url=$4,status=$5,shipped_at=$6,estimate=$7,delivered_at=$8,manual_override=$9,tracking_state=CASE WHEN $12 THEN $10 ELSE tracking_state END,tracker_id=CASE WHEN $12 THEN NULL ELSE tracker_id END,needs_review=false,review_reason=NULL,updated_at=now(),status_at=now(),estimate_at=now(),version=version+1 WHERE id=$11 RETURNING *`,
           [...params, id, !!trackingChanged],
         )
       ).rows[0];

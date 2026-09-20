@@ -16,8 +16,20 @@ struct PackageDetailView: View {
           Text(s.merchant).font(.title2.bold())
           StatusLabel(status: s.status)
           Text(Dates.delivery(s, zone: store.timeZone, now: store.now())).font(.headline)
-          if let reason = s.reviewReason {
+          ForEach(s.attentionReasons ?? (s.reviewReason.map { [$0] } ?? []), id: \.self) { reason in
             Label(reason, systemImage: "exclamationmark.triangle").font(.callout)
+          }
+          if s.status == "delivered" {
+            VStack(alignment: .leading, spacing: 5) {
+              if let collected = s.collectedAt {
+                Label(
+                  "Collected by \(s.collectedByName ?? "a household member")",
+                  systemImage: "checkmark.circle.fill")
+                Text(Dates.timestamp(collected, zone: store.timeZone)).font(.footnote)
+              } else {
+                Text("Not yet marked collected").font(.footnote)
+              }
+            }
           }
           ForEach(Array(s.items.enumerated()), id: \.offset) { _, item in
             HStack(alignment: .top) {
@@ -64,6 +76,14 @@ struct PackageDetailView: View {
               await load()
             }
           }.disabled(!store.canWrite || s.trackingNumber == nil)
+          if s.status == "delivered" && s.dismissedAt == nil {
+            Button(s.collectedAt == nil ? "Mark collected" : "Undo collection") {
+              Task {
+                await store.action(s, s.collectedAt == nil ? "collect" : "uncollect")
+                await load()
+              }
+            }.disabled(!store.canWrite)
+          }
           if s.canDeliver {
             Button("Mark delivered") {
               Task {

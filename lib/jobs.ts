@@ -11,10 +11,12 @@ import { gmailConfigured, syncGmail } from "./gmail";
 import { randomUUID } from "node:crypto";
 import { fedexConfigured } from "./tracking-config";
 import { fedexCarrierPattern } from "./tracking-identity";
+import { scheduleNotifications, deliverPush } from "./notifications";
 type Job = {
   id: string;
   kind: string;
   payload: {
+    deliveryId?: string;
     emailId?: string;
     connectionId?: string;
     generation?: string;
@@ -37,6 +39,9 @@ export async function runOne() {
   if (!job) return false;
   try {
     switch (job.kind) {
+      case "push_send":
+        await deliverPush(job.payload.deliveryId!);
+        break;
       case "gmail_sync":
         await syncGmail(job.payload.connectionId!, job.payload.generation!);
         break;
@@ -148,4 +153,5 @@ export async function schedule() {
       "DELETE FROM jobs WHERE status='done' AND created_at<now()-interval '30 days'",
     );
   });
+  await scheduleNotifications();
 }

@@ -80,6 +80,7 @@ function profileAPI({ existing = false, wrongCertificate = false, wrongBundle = 
   const api = {
     all: async path => {
       if (path.startsWith('bundleIds?')) return [{ id: 'bundle', attributes: { identifier: wrongBundle ? 'com.other' : 'com.jimgreco.doorstep' } }];
+      if (path.endsWith('/bundleIdCapabilities')) return [{attributes:{capabilityType:'PUSH_NOTIFICATIONS'}}];
       if (path.startsWith('certificates?')) return [{ id: 'cert', attributes: { certificateType: 'DISTRIBUTION',
         activated: true, expirationDate: expired ? '2000-01-01' : '2099-01-01',
         certificateContent: Buffer.from(wrongCertificate ? 'wrong' : 'synthetic-cert').toString('base64') } }];
@@ -164,4 +165,13 @@ test('app lookup binds release to the unique Doorstep bundle before numbering or
   for (const apps of [[], [app, app], [{...app, id: undefined}]]) {
     await assert.rejects(findDoorstepApp({all: async () => apps}, 'com.jimgreco.doorstep'), /existing Doorstep/);
   }
+});
+
+test('adding push capability generates a new profile instead of reusing one without entitlements', async () => {
+  const { api, calls } = profileAPI({ existing: true });
+  const original = api.all;
+  api.all = path => path.endsWith('/bundleIdCapabilities') ? Promise.resolve([]) : original(path);
+  await ensureProfile(api, profileOptions);
+  assert.deepEqual(calls.map(c => c.path), ['bundleIdCapabilities', 'profiles']);
+  assert.equal(calls[0].body.data.attributes.capabilityType, 'PUSH_NOTIFICATIONS');
 });

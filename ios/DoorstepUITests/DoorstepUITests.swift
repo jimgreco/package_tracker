@@ -22,6 +22,35 @@ import XCTest
       app.swipeUp()
     }
   }
+  func testCollectionAndUndo() {
+    launch()
+    XCTAssertTrue(app.buttons["packageFilter"].waitForExistence(timeout: 5))
+    app.buttons["packageFilter"].tap()
+    app.buttons["Delivered (1)"].tap()
+    app.staticTexts["Cometeer"].tap()
+    reveal(app.buttons["Mark collected"])
+    app.buttons["Mark collected"].tap()
+    reveal(app.buttons["Undo collection"])
+    XCTAssertTrue(app.buttons["Undo collection"].waitForExistence(timeout: 5))
+    screenshot("collected-package")
+    app.buttons["Undo collection"].tap()
+    reveal(app.buttons["Mark collected"])
+    XCTAssertTrue(app.buttons["Mark collected"].waitForExistence(timeout: 5))
+  }
+  func testAttentionReasonsAndNotificationSettings() {
+    launch()
+    XCTAssertTrue(app.buttons["packageFilter"].waitForExistence(timeout: 5))
+    app.buttons["packageFilter"].tap()
+    app.buttons["Needs attention (1)"].tap()
+    app.staticTexts["Muji"].tap()
+    XCTAssertTrue(
+      app.staticTexts["Tracking is overdue for a fresh check."].waitForExistence(timeout: 5))
+    screenshot("attention-reasons")
+    app.tabBars.buttons["Settings"].tap()
+    reveal(app.switches["Send me notifications"])
+    XCTAssertTrue(app.switches["Send me notifications"].exists)
+    screenshot("notification-preferences")
+  }
   func testSignInLanding() {
     launch(["--signed-out"])
     XCTAssertTrue(app.buttons["googleSignIn"].waitForExistence(timeout: 5))

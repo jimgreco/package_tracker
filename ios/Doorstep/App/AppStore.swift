@@ -79,6 +79,7 @@ import Observation
   }
   func signOut() async {
     guard let old = session else { return }
+    PushNotifications.shared.signOut()
     clearViews()
     session = nil
     loading = false
@@ -97,6 +98,7 @@ import Observation
     guard epoch == capturedEpoch, !(error is CancellationError) else { return }
     if let failure = error as? APIError {
       if failure.status == 401 || failure.status == 403 {
+        PushNotifications.shared.signOut()
         clearViews()
         session = nil
         cache.clear()
@@ -243,6 +245,10 @@ import Observation
       } else if action == "restore" {
         undoDismissal = nil
         message = "Package restored."
+      } else if action == "collect" {
+        message = "Package marked collected."
+      } else if action == "uncollect" {
+        message = "Collection undone."
       } else if action == "deliver" {
         message = "Marked delivered. Correct the delivery date in Edit details."
       } else if action == "refresh" {

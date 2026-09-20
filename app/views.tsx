@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { NotificationSettings } from "./notification-settings";
 import { GmailSettings } from "./gmail-settings";
 import {
   CalendarDays,
@@ -288,6 +289,11 @@ export function SettingsView({
     Date.now() - new Date(s.worker.lastSeenAt).getTime() > 180000;
   return (
     <div className="settings-grid">
+      <NotificationSettings
+        key={s.householdId}
+        householdId={s.householdId}
+        demo={s.demo}
+      />
       {!s.demo && (
         <section className="settings-card">
           <div className="settings-title">

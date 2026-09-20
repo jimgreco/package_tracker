@@ -1,6 +1,7 @@
 import SwiftUI
 
 @main struct DoorstepApp: App {
+  @UIApplicationDelegateAdaptor(PushAppDelegate.self) private var pushDelegate
   @State private var store: AppStore
   @State private var privacy = PrivacyShield()
   @Environment(\.scenePhase) private var phase
@@ -21,6 +22,10 @@ import SwiftUI
   var body: some Scene {
     WindowGroup {
       RootView().environment(store).tint(.doorstep)
+        .task(id: PushNotifications.shared.token) {
+          await PushNotifications.shared.sync(store: store)
+        }
+        .task(id: store.session?.token) { await PushNotifications.shared.sync(store: store) }
         .onChange(of: phase, initial: true) { _, phase in privacy.setHiddenContent(phase != .active)
         }
         .task(id: phase) {
@@ -29,15 +34,18 @@ import SwiftUI
             return
           }
           await store.start()
+          await PushNotifications.shared.sync(store: store)
           while !Task.isCancelled {
             do { try await Task.sleep(for: .seconds(store.retryDelay)) } catch { return }
             await store.refresh()
+            await PushNotifications.shared.sync(store: store)
           }
         }
     }
   }
 }
 struct RootView: View {
+  @State private var notificationPackage: PushDestination?
   @Environment(AppStore.self) private var store
   var body: some View {
     Group {
@@ -51,6 +59,36 @@ struct RootView: View {
         }.id(store.epoch)
       }
     }
+    .task(id: "\(PushNotifications.shared.destination?.id ?? ""):\(store.session?.userId ?? "")") {
+      guard let destination = PushNotifications.shared.destination, store.session != nil else {
+        return
+      }
+      await store.refresh()
+      if store.householdId != destination.householdId {
+        guard
+          store.dashboard?.settings.households.contains(where: { $0.id == destination.householdId })
+            == true
+        else {
+          PushNotifications.shared.destination = nil
+          store.errorMessage = "This notification belongs to a household you can no longer access."
+          return
+        }
+        await store.switchHousehold(destination.householdId)
+      }
+      if store.householdId == destination.householdId { notificationPackage = destination }
+      PushNotifications.shared.destination = nil
+    }
+    .sheet(item: $notificationPackage) { destination in
+      NavigationStack {
+        PackageDetailView(id: destination.id).toolbar {
+          ToolbarItem(placement: .confirmationAction) {
+            Button("Done") { notificationPackage = nil }
+          }
+        }
+      }.environment(store)
+    }
+    .onChange(of: store.session?.userId) { _, _ in notificationPackage = nil }
+    .onChange(of: store.householdId) { _, _ in notificationPackage = nil }
   }
 }
 struct SignInView: View {

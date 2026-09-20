@@ -11,7 +11,7 @@ export default function PrivacyPage() {
     <main className="privacy-page">
       <a href="/">← Back to Doorstep</a>
       <h1>Privacy policy</h1>
-      <p className="privacy-updated">Last updated September 15, 2026</p>
+      <p className="privacy-updated">Last updated September 20, 2026</p>
       <p>
         Doorstep is a household package tracker operated by Jim Greco. It turns
         emails you forward or choose to import from Gmail into a shared delivery
@@ -79,6 +79,23 @@ export default function PrivacyPage() {
         integration. Contact us to request deletion of imported data.
       </p>
 
+      <h2>Optional iPhone notifications</h2>
+      <p>
+        If you enable notifications, Doorstep stores your Apple push device
+        token with your sign-in session and your preferences for each household.
+        Apple receives the device token, a general delivery message, and package
+        and household identifiers used to open the app. Alerts do not include
+        merchant names, item names, tracking numbers, or email contents.
+        Notification delivery records are retained for up to 30 days. You can
+        disable alerts in Doorstep Settings or iPhone Settings. Signing out
+        removes the server device registration when session revocation succeeds.
+      </p>
+      <p>
+        Marking a package collected records the household member’s name and the
+        collection time for other household members. Undoing collection clears
+        the current record; the action remains in the package’s household
+        history.
+      </p>
       <h2>Google Calendar</h2>
       <p>
         Connecting Google Calendar is optional and separate from signing in.

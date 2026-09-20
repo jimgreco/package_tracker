@@ -198,18 +198,22 @@ export default function Page() {
   const all = (data?.shipments || []).filter((s) => !s.dismissedAt);
   async function quickAction(
     s: Shipment,
-    kind: "deliver" | "dismiss" | "restore",
+    kind: "deliver" | "dismiss" | "restore" | "collect" | "uncollect",
   ) {
     await action(`package:${s.id}`, async () => {
       await api(`shipments/${s.id}/${kind}`, {});
       if (kind === "dismiss" && selected === s.id) closeDetail();
       await reload();
       notify(
-        kind === "deliver"
-          ? "Marked delivered. You can set the delivery date in Edit details."
-          : kind === "dismiss"
-            ? "Package dismissed. Restore it from Dismissed anytime."
-            : "Package restored.",
+        kind === "collect"
+          ? "Package marked collected."
+          : kind === "uncollect"
+            ? "Collection undone."
+            : kind === "deliver"
+              ? "Marked delivered. You can set the delivery date in Edit details."
+              : kind === "dismiss"
+                ? "Package dismissed. Restore it from Dismissed anytime."
+                : "Package restored.",
       );
     });
   }
@@ -240,8 +244,7 @@ export default function Page() {
           ? active.includes(s)
           : filter === "Delivered"
             ? s.status === "delivered"
-            : s.needsReview ||
-              ["failure", "delayed", "unknown"].includes(s.status))) &&
+            : (s.attentionReasons?.length ?? 0) > 0)) &&
       [
         s.merchant,
         s.orderNumber,
@@ -467,10 +470,10 @@ export default function Page() {
                                     >
                                       {STATUS_LABEL[s.status]}
                                     </span>
-                                    {s.needsReview && (
+                                    {!!s.attentionReasons?.length && (
                                       <span
                                         className="review-indicator"
-                                        title="Needs review"
+                                        title={s.attentionReasons?.join(" ")}
                                       >
                                         <AlertCircle size={14} />
                                       </span>
@@ -488,6 +491,18 @@ export default function Page() {
                                       .join(", ") ||
                                       "Item details not available"}
                                   </p>
+                                  {s.collectedAt && (
+                                    <p>
+                                      Collected by{" "}
+                                      {s.collectedByName ||
+                                        "a household member"}
+                                    </p>
+                                  )}
+                                  {!!s.attentionReasons?.length && (
+                                    <p className="attention-summary">
+                                      {s.attentionReasons[0]}
+                                    </p>
+                                  )}
                                   <div className="shipment-meta">
                                     <span>
                                       {s.carrier || "Awaiting shipping details"}
@@ -895,13 +910,21 @@ export default function Page() {
               <span className={"status status-" + detail.shipment.status}>
                 {STATUS_LABEL[detail.shipment.status]}
               </span>
-              {detail.shipment.needsReview && (
+              {!!detail.shipment.attentionReasons?.length && (
                 <div className="info-box review-box">
                   <AlertCircle size={19} />
-                  <span>
-                    {detail.shipment.reviewReason ||
-                      "Some details need your review."}
-                  </span>
+                  <div>
+                    {detail.shipment.attentionReasons.map((reason) => (
+                      <p key={reason}>{reason}</p>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {detail.shipment.status === "delivered" && (
+                <div className="info-box">
+                  {detail.shipment.collectedAt
+                    ? `Collected by ${detail.shipment.collectedByName || "a household member"} · ${new Date(detail.shipment.collectedAt).toLocaleString(undefined, { timeZone: data?.settings.timeZone })}`
+                    : "Delivered · not yet marked collected"}
                 </div>
               )}
               <div className="arrival-detail">
@@ -1017,6 +1040,24 @@ export default function Page() {
                   </button>
                 ) : (
                   <>
+                    {detail.shipment.status === "delivered" && (
+                      <button
+                        className="secondary"
+                        disabled={busy === `package:${detail.shipment.id}`}
+                        onClick={() =>
+                          quickAction(
+                            detail.shipment,
+                            detail.shipment.collectedAt
+                              ? "uncollect"
+                              : "collect",
+                          )
+                        }
+                      >
+                        {detail.shipment.collectedAt
+                          ? "Undo collection"
+                          : "Mark collected"}
+                      </button>
+                    )}
                     {!["delivered", "cancelled", "return_to_sender"].includes(
                       detail.shipment.status,
                     ) && (

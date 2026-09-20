@@ -40,6 +40,9 @@
         timeZone: "America/New_York")
       var delayed = shipment(
         id: "30000000-0000-0000-0000-000000000003", merchant: "Muji", status: "delayed")
+      delayed.attentionReasons = [
+        "The carrier reported a weather delay.", "Tracking is overdue for a fresh check.",
+      ]
       delayed.needsReview = true
       delayed.reviewReason = "The carrier reported a weather delay."
       delayed.estimate = nil
@@ -138,6 +141,10 @@
       if path == "auth/config" { return Data(#"{"google":true}"#.utf8) }
       if offline { throw URLError(.notConnectedToInternet) }
       if malformed { return Data("malformed".utf8) }
+      if path == "notifications/preferences" {
+        if method == "POST", let body { return body }
+        return try JSONEncoder().encode(NotificationPreferences())
+      }
       if path == "dashboard" { return try JSONEncoder().encode(value) }
       let parts = path.split(separator: "/").map(String.init)
       if parts.first == "shipments" {
@@ -147,6 +154,14 @@
         if parts.count == 3, let index = value.shipments.firstIndex(where: { $0.id == parts[1] }) {
           if parts[2] == "dismiss" { value.shipments[index].dismissedAt = "2026-09-19T16:00:00Z" }
           if parts[2] == "restore" { value.shipments[index].dismissedAt = nil }
+          if parts[2] == "collect" {
+            value.shipments[index].collectedAt = "2026-09-19T16:00:00Z"
+            value.shipments[index].collectedByName = "Sample member"
+          }
+          if parts[2] == "uncollect" {
+            value.shipments[index].collectedAt = nil
+            value.shipments[index].collectedByName = nil
+          }
           if parts[2] == "deliver" { value.shipments[index].status = "delivered" }
           if parts[2] == "merge", let body {
             let target = try JSONDecoder().decode([String: String].self, from: body)["targetId"]!

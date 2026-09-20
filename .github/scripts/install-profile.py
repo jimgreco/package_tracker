@@ -11,6 +11,7 @@ data = plistlib.loads(subprocess.check_output(['security', 'cms', '-D', '-i', st
 assert data['TeamIdentifier'] == ['V6JPQCD336']
 assert data['Entitlements']['application-identifier'] == 'V6JPQCD336.com.jimgreco.doorstep'
 assert data['Entitlements'].get('get-task-allow') is False
+assert data['Entitlements'].get('aps-environment') == 'production', 'Profile must enable production push notifications'
 assert not data.get('ProvisionedDevices') and not data.get('ProvisionsAllDevices')
 assert data['ExpirationDate'].replace(tzinfo=timezone.utc) > datetime.now(timezone.utc)
 assert (Path(os.environ['RUNNER_TEMP']) / 'doorstep-cert.der').read_bytes() in data['DeveloperCertificates']

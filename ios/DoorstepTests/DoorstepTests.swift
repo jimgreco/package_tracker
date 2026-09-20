@@ -138,6 +138,19 @@ final class ModelTests: XCTestCase {
     XCTAssertTrue(offline.shipments.isEmpty)
     XCTAssertTrue(offline.errorMessage?.contains("could not revoke") == true)
   }
+  func testCollectionMutationReloadsDetail() async throws {
+    let store = AppStore(
+      api: FixtureAPI(), session: Fixture.session, persistent: false, now: { Fixture.clock })
+    await store.start()
+    let package = try XCTUnwrap(store.shipments.first(where: { $0.status == "delivered" }))
+    await store.action(package, "collect")
+    let collected = await store.loadDetail(package.id)
+    XCTAssertNotNil(collected?.shipment.collectedAt)
+    XCTAssertEqual(collected?.shipment.collectedByName, "Sample member")
+    await store.action(package, "uncollect")
+    let undone = await store.loadDetail(package.id)
+    XCTAssertNil(undone?.shipment.collectedAt)
+  }
   func testDuplicateSaveAndPreservedServerData() async throws {
     let api = FixtureAPI()
     let store = AppStore(

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Adapted from workouts/.github/scripts/ensure-app-store-profile.mjs.
-// Doorstep has one app target and no additional signing entitlements.
+// Doorstep has one app target with Apple push notifications.
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -18,8 +18,16 @@ export async function ensureProfile(api, { bundleId, profileName, certificate, n
     && c.attributes.certificateContent
     && hash(Buffer.from(c.attributes.certificateContent, 'base64')) === hash(certificate));
   if (!cert) throw new Error('IOS_DIST_CERT_P12 does not match an active, unexpired distribution certificate.');
+  const capabilities = await api.all(`bundleIds/${bundle.id}/bundleIdCapabilities`);
+  const addedPush = !capabilities.some(c => c.attributes?.capabilityType === 'PUSH_NOTIFICATIONS');
+  if (addedPush) {
+    await api.request('POST', 'bundleIdCapabilities', { data: {
+      type: 'bundleIdCapabilities', attributes: { capabilityType: 'PUSH_NOTIFICATIONS' },
+      relationships: { bundleId: { data: { type: 'bundleIds', id: bundle.id } } }
+    }});
+  }
   const profiles = await api.all(`profiles?filter[name]=${encodeURIComponent(profileName)}&filter[profileType]=IOS_APP_STORE&filter[profileState]=ACTIVE&include=bundleId,certificates&limit=200`);
-  let profile = profiles.find(p => p.attributes?.profileState === 'ACTIVE'
+  let profile = !addedPush && profiles.find(p => p.attributes?.profileState === 'ACTIVE'
     && p.attributes.name === profileName && p.attributes.profileType === 'IOS_APP_STORE'
     && Date.parse(p.attributes.expirationDate) > now
     && p.relationships?.bundleId?.data?.id === bundle.id

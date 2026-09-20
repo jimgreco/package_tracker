@@ -47,6 +47,9 @@ export type Shipment = {
   shippedAt: string | null;
   estimate: Estimate | null;
   deliveredAt: string | null;
+  collectedAt?: string | null;
+  collectedByName?: string | null;
+  attentionReasons?: string[];
   createdAt: string;
   timelineAt: string;
   firstEmailAt: string | null;
