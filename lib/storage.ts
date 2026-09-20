@@ -60,7 +60,7 @@ export async function safeImageDownload(
       {
         family: 4,
         headers: {
-          "User-Agent": "Doorstep/1.0 image-cache",
+          "User-Agent": "PorchPong/1.0 image-cache",
           Accept: "image/png,image/jpeg,image/webp,image/gif",
         },
         lookup: (_hostname, _options, cb) => cb(null, addresses[0].address, 4),

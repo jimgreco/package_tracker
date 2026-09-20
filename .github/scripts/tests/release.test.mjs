@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createAPI, makeToken } from '../asc-api.mjs';
 import { ensureProfile } from '../ensure-app-store-profile.mjs';
-import { nextBuildNumber, waitForBuild, checkLatestBuild, findDoorstepApp } from '../testflight.mjs';
+import { nextBuildNumber, waitForBuild, checkLatestBuild, findPorchPongApp, renameApp } from '../testflight.mjs';
 
 test('verification-only Apple check reads existing state without attributing an upload', async () => {
   const api = {
@@ -75,7 +75,7 @@ test('CI numbering handles the pre-GitHub builds, commit count, retries and remo
 
 function profileAPI({ existing = false, wrongCertificate = false, wrongBundle = false, expired = false } = {}) {
   const calls = [];
-  const attributes = { name: 'Doorstep CI', profileState: 'ACTIVE', profileType: 'IOS_APP_STORE', expirationDate: '2099-01-01',
+  const attributes = { name: 'PorchPong CI', profileState: 'ACTIVE', profileType: 'IOS_APP_STORE', expirationDate: '2099-01-01',
     profileContent: Buffer.from('synthetic-profile').toString('base64') };
   const api = {
     all: async path => {
@@ -95,7 +95,7 @@ function profileAPI({ existing = false, wrongCertificate = false, wrongBundle = 
   };
   return { api, calls };
 }
-const profileOptions = { bundleId: 'com.jimgreco.doorstep', profileName: 'Doorstep CI', certificate: Buffer.from('synthetic-cert') };
+const profileOptions = { bundleId: 'com.jimgreco.doorstep', profileName: 'PorchPong CI', certificate: Buffer.from('synthetic-cert') };
 
 test('profile creation binds only the exact registered bundle and imported distribution certificate', async () => {
   const { api, calls } = profileAPI();
@@ -154,17 +154,44 @@ test('processing failure, compliance blockage and timeout never claim release su
 });
 
 
-test('app lookup binds release to the unique Doorstep bundle before numbering or upload', async () => {
+test('app lookup binds release to the unique PorchPong bundle before numbering or upload', async () => {
   const app = { id: '1234567890', attributes: { bundleId: 'com.jimgreco.doorstep' } };
   const api = { all: async path => {
     assert.match(path, /filter\[bundleId\]=com.jimgreco.doorstep/);
     return [app, { id: 'other', attributes: { bundleId: 'com.other' } }];
   } };
-  assert.equal(await findDoorstepApp(api, 'com.jimgreco.doorstep'), app.id);
-  await assert.rejects(findDoorstepApp(api, 'com.other'), /Expected Doorstep bundle/);
+  assert.equal(await findPorchPongApp(api, 'com.jimgreco.doorstep'), app.id);
+  await assert.rejects(findPorchPongApp(api, 'com.other'), /Expected PorchPong bundle/);
   for (const apps of [[], [app, app], [{...app, id: undefined}]]) {
-    await assert.rejects(findDoorstepApp({all: async () => apps}, 'com.jimgreco.doorstep'), /existing Doorstep/);
+    await assert.rejects(findPorchPongApp({all: async () => apps}, 'com.jimgreco.doorstep'), /existing PorchPong/);
   }
+});
+
+test('app rename updates only the exact English localization and is idempotent', async () => {
+  const calls = [];
+  const app = { id: '1234567890', attributes: { bundleId: 'com.jimgreco.doorstep' } };
+  const localization = { id: 'localization', attributes: { locale: 'en-US', name: 'Doorstep Package Tracker' } };
+  const api = {
+    all: async path => {
+      if (path.startsWith('apps?')) return [app];
+      if (path.startsWith('apps/1234567890/appInfos?')) return [{ id: 'info' }];
+      if (path.startsWith('appInfos/info/appInfoLocalizations?')) return [localization];
+      throw new Error(`Unexpected path: ${path}`);
+    },
+    request: async (method, path, body) => {
+      calls.push({ method, path, body });
+      return { data: { ...localization, attributes: { ...localization.attributes, name: body.data.attributes.name } } };
+    },
+  };
+  assert.deepEqual(await renameApp(api, 'com.jimgreco.doorstep', 'PorchPong'), {
+    app_id: app.id, name: 'PorchPong', locale: 'en-US', changed: true,
+  });
+  assert.deepEqual(calls, [{ method: 'PATCH', path: 'appInfoLocalizations/localization', body: {
+    data: { type: 'appInfoLocalizations', id: 'localization', attributes: { name: 'PorchPong' } },
+  } }]);
+  localization.attributes.name = 'PorchPong';
+  assert.equal((await renameApp(api, 'com.jimgreco.doorstep', 'PorchPong')).changed, false);
+  assert.equal(calls.length, 1);
 });
 
 test('adding push capability generates a new profile instead of reusing one without entitlements', async () => {

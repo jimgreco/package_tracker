@@ -57,7 +57,7 @@ export function NotificationSettings({
       <h2>iPhone notifications</h2>
       <p>
         Your preferences for this household. Enable notifications in the
-        Doorstep iPhone app to register your phone.
+        PorchPong iPhone app to register your phone.
       </p>
       {prefs && (
         <>

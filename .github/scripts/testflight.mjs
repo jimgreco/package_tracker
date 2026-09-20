@@ -18,7 +18,7 @@ export function nextBuildNumber(commitCount, builds) {
 export async function checkLatestBuild(api, appId) {
   const builds = await api.all(`builds?filter[app]=${appId}&sort=-uploadedDate&limit=1`);
   const build = builds[0];
-  if (!build) throw new Error('No existing Doorstep build found.');
+  if (!build) throw new Error('No existing PorchPong build found.');
   const detail = await api.request('GET', `builds/${encodeURIComponent(build.id)}/buildBetaDetail`);
   return { app_id: appId, build_number: build.attributes.version,
     processing_state: build.attributes.processingState,
@@ -55,24 +55,47 @@ export async function waitForBuild(api, appId, number, {
   throw new Error(`Timed out waiting for build ${number}. Upload may have succeeded; inspect App Store Connect before retrying.`);
 }
 
-export async function findDoorstepApp(api, bundle) {
-  if (bundle !== 'com.jimgreco.doorstep') throw new Error('Expected Doorstep bundle ID.');
+export async function findPorchPongApp(api, bundle) {
+  if (bundle !== 'com.jimgreco.doorstep') throw new Error('Expected PorchPong bundle ID.');
   const apps = await api.all(`apps?filter[bundleId]=${encodeURIComponent(bundle)}&limit=200`);
   const matches = apps.filter(app => app.attributes?.bundleId === bundle);
   if (matches.length !== 1 || !/^\d+$/.test(matches[0].id)) {
-    throw new Error('Expected the existing Doorstep App Store Connect app.');
+    throw new Error('Expected the existing PorchPong App Store Connect app.');
   }
   return matches[0].id;
 }
 
+export async function renameApp(api, bundle, name, locale = 'en-US') {
+  if (!name || name.length > 30) throw new Error('App name must be between 1 and 30 characters.');
+  const appId = await findPorchPongApp(api, bundle);
+  const infos = await api.all(`apps/${appId}/appInfos?limit=200`);
+  const localizations = [];
+  for (const info of infos) {
+    localizations.push(...await api.all(
+      `appInfos/${encodeURIComponent(info.id)}/appInfoLocalizations?fields[appInfoLocalizations]=locale,name&limit=200`,
+    ));
+  }
+  const matches = localizations.filter(item => item.attributes?.locale === locale);
+  if (matches.length !== 1) throw new Error(`Expected one ${locale} app info localization.`);
+  if (matches[0].attributes?.name === name) return { app_id: appId, name, locale, changed: false };
+  const result = await api.request('PATCH', `appInfoLocalizations/${encodeURIComponent(matches[0].id)}`, {
+    data: { type: 'appInfoLocalizations', id: matches[0].id, attributes: { name } },
+  });
+  if (result.data?.attributes?.name !== name) throw new Error('App Store Connect did not confirm the new app name.');
+  return { app_id: appId, name, locale, changed: true };
+}
+
 async function main() {
   const api = createAPI();
-  const appId = await findDoorstepApp(api, process.env.IOS_BUNDLE_ID);
+  const appId = await findPorchPongApp(api, process.env.IOS_BUNDLE_ID);
   if (process.argv[2] === 'number') {
     const builds = await api.all(`builds?filter[app]=${appId}&fields[builds]=version&limit=200`);
     const number = nextBuildNumber(process.env.COMMIT_COUNT, builds);
     appendFileSync(process.env.GITHUB_ENV, `IOS_BUILD_NUMBER=${number}\n`);
-    console.log(`Doorstep build number: ${number}`);
+    console.log(`PorchPong build number: ${number}`);
+  } else if (process.argv[2] === 'rename') {
+    const result = await renameApp(api, process.env.IOS_BUNDLE_ID, process.argv[3], process.argv[4]);
+    console.log(`${result.name} is registered for ${result.locale}.`);
   } else if (process.argv[2] === 'check') {
     const result = await checkLatestBuild(api, appId);
     writeFileSync('.build-report/verification-only.json', JSON.stringify(result, null, 2) + '\n');
@@ -87,10 +110,10 @@ async function main() {
     result.commit = process.env.GITHUB_SHA;
     writeFileSync('.build-report/testflight.json', JSON.stringify(result, null, 2) + '\n');
     appendFileSync(process.env.GITHUB_STEP_SUMMARY,
-      `### Doorstep TestFlight\n\nBuild **${number}** (${result.commit}) processed and is **IN_BETA_TESTING** for internal testers.\n\n` +
+      `### PorchPong TestFlight\n\nBuild **${number}** (${result.commit}) processed and is **IN_BETA_TESTING** for internal testers.\n\n` +
       `[App Store Connect](https://appstoreconnect.apple.com/apps/${appId}/testflight/ios)\n\n` +
       'No external tester invitations or App Store release were performed.\n');
-  } else throw new Error('Expected number, check or wait command.');
+  } else throw new Error('Expected number, rename, check or wait command.');
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch(error => { console.error(error.message); process.exitCode = 1; });

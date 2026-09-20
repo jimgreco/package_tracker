@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Adapted from workouts/.github/scripts/ensure-app-store-profile.mjs.
-// Doorstep has one app target with Apple push notifications.
+// PorchPong has one app target with Apple push notifications.
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';

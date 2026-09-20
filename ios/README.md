@@ -1,6 +1,6 @@
-# Doorstep for iPhone
+# PorchPong for iPhone
 
-SwiftUI client for the existing Doorstep server. iPhone, iOS 18 or later, Swift 6.
+SwiftUI client for the existing PorchPong server. iPhone, iOS 18 or later, Swift 6.
 The three tabs provide packages, original emails, and household settings. Tracking,
 extraction, Gmail imports and Google Calendar projections remain on the server.
 Google account login and optional Calendar consent use system authentication browsers.
@@ -11,7 +11,7 @@ Its consent browser returns directly to the app; Gmail setup stays on the websit
 ## Project and configuration
 
 - Xcode 26.2 (17C52), iOS 26.2 SDK; XcodeGen is installed locally.
-- Open `ios/Doorstep.xcodeproj`; regenerate with `xcodegen generate --spec ios/project.yml`.
+- Open `ios/PorchPong.xcodeproj`; regenerate with `xcodegen generate --spec ios/project.yml`.
 - Bundle ID / callback scheme: `com.jimgreco.doorstep`.
 - Exact callback: `com.jimgreco.doorstep:/auth/callback`.
 - Existing signing team: `V6JPQCD336`. The existing Apple Development identity and
@@ -28,7 +28,7 @@ Its consent browser returns directly to the app; Gmail setup stays on the websit
 - Native login reuses the existing Google web client and web callback. No Gmail or
   Calendar OAuth callback, scope, or grant configuration needs to change.
 - `Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png` reproduces `app/icon.svg`.
-  Regenerate with `swift ios/scripts/generate-icon.swift ios/Doorstep/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png`.
+  Regenerate with `swift ios/scripts/generate-icon.swift ios/PorchPong/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png`.
 
 ## Build and automated tests
 
@@ -37,16 +37,16 @@ Run from the repository root. Discover installed devices with
 
 ```sh
 xcodegen generate --spec ios/project.yml
-xcodebuild -project ios/Doorstep.xcodeproj -scheme Doorstep -configuration Debug \
+xcodebuild -project ios/PorchPong.xcodeproj -scheme PorchPong -configuration Debug \
   -destination 'platform=iOS Simulator,id=2399DE10-E7FA-4085-9A27-4BF05243023B' \
   -derivedDataPath ios/build build CODE_SIGNING_ALLOWED=NO
-xcodebuild -project ios/Doorstep.xcodeproj -scheme Doorstep -configuration Debug \
+xcodebuild -project ios/PorchPong.xcodeproj -scheme PorchPong -configuration Debug \
   -destination 'platform=iOS Simulator,id=2399DE10-E7FA-4085-9A27-4BF05243023B' \
   -derivedDataPath ios/build -resultBundlePath output/ios/tests-iphone17pro.xcresult \
   test CODE_SIGNING_ALLOWED=NO
 xcrun simctl boot ADC134FF-52D5-47AB-B22D-51785ED07B81
 xcrun simctl ui ADC134FF-52D5-47AB-B22D-51785ED07B81 appearance dark
-xcodebuild -project ios/Doorstep.xcodeproj -scheme Doorstep -configuration Debug \
+xcodebuild -project ios/PorchPong.xcodeproj -scheme PorchPong -configuration Debug \
   -destination 'platform=iOS Simulator,id=ADC134FF-52D5-47AB-B22D-51785ED07B81' \
   -derivedDataPath ios/build -resultBundlePath output/ios/tests-iphone16e-dark.xcresult \
   test CODE_SIGNING_ALLOWED=NO
@@ -110,14 +110,14 @@ Use Xcode's directory outside Documents for signed builds. The Documents file
 provider adds Finder metadata to generated bundles, which codesign rejects.
 
 ```sh
-xcodebuild -project ios/Doorstep.xcodeproj -scheme Doorstep -configuration Release \
+xcodebuild -project ios/PorchPong.xcodeproj -scheme PorchPong -configuration Release \
   -destination 'generic/platform=iOS' \
-  -derivedDataPath "$HOME/Library/Developer/Xcode/DerivedData/Doorstep-device" \
-  -archivePath "$HOME/Library/Developer/Xcode/Archives/2026-09-19/Doorstep.xcarchive" \
+  -derivedDataPath "$HOME/Library/Developer/Xcode/DerivedData/PorchPong-device" \
+  -archivePath "$HOME/Library/Developer/Xcode/Archives/2026-09-19/PorchPong.xcarchive" \
   archive -allowProvisioningUpdates
 xcodebuild -exportArchive \
-  -archivePath "$HOME/Library/Developer/Xcode/Archives/2026-09-19/Doorstep.xcarchive" \
-  -exportPath "$HOME/Library/Developer/Xcode/Archives/2026-09-19/Doorstep-device" \
+  -archivePath "$HOME/Library/Developer/Xcode/Archives/2026-09-19/PorchPong.xcarchive" \
+  -exportPath "$HOME/Library/Developer/Xcode/Archives/2026-09-19/PorchPong-device" \
   -exportOptionsPlist ios/ExportOptions-Development.plist -allowProvisioningUpdates
 xcrun devicectl list devices
 ```
@@ -127,10 +127,10 @@ Xcode and Run, or install the signed archived app with:
 
 ```sh
 xcrun devicectl device install app --device '<device identifier>' \
-  "$HOME/Library/Developer/Xcode/Archives/2026-09-19/Doorstep.xcarchive/Products/Applications/Doorstep.app"
+  "$HOME/Library/Developer/Xcode/Archives/2026-09-19/PorchPong.xcarchive/Products/Applications/PorchPong.app"
 ```
 
-The exported development IPA is `Doorstep-device/Doorstep.ipa`. Development signing
+The exported development IPA is `PorchPong-device/PorchPong.ipa`. Development signing
 is not TestFlight upload or App Store distribution. No upload/submission is part of
 this delivery. The connected-device inventory showed Jim's iPhone as unavailable;
 physical sign-in must be completed by the user when the phone is connected.

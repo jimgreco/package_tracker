@@ -86,7 +86,7 @@ jobs:
         run: |
           node .github/scripts/ensure-app-store-profile.mjs \
             --bundle-id "$IOS_BUNDLE_ID" \
-            --profile-name "Doorstep App Store ${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --profile-name "PorchPong App Store ${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
             --certificate-der "$RUNNER_TEMP/doorstep-cert.der" \
             --output "$RUNNER_TEMP/doorstep.mobileprovision"
           python3 .github/scripts/install-profile.py
@@ -99,10 +99,10 @@ jobs:
           xcodegen generate --spec ios/ci-project.yml --project ios
       - name: Archive
         run: |
-          xcodebuild archive -project ios/Doorstep.xcodeproj -scheme Doorstep \
+          xcodebuild archive -project ios/PorchPong.xcodeproj -scheme PorchPong \
             -configuration Release -destination 'generic/platform=iOS' \
-            -archivePath "$RUNNER_TEMP/Doorstep.xcarchive" \
-            -derivedDataPath "$RUNNER_TEMP/Doorstep-derived" \
+            -archivePath "$RUNNER_TEMP/PorchPong.xcarchive" \
+            -derivedDataPath "$RUNNER_TEMP/PorchPong-derived" \
             -authenticationKeyPath "$APP_STORE_CONNECT_API_KEY_PATH" \
             -authenticationKeyID "$APP_STORE_CONNECT_KEY_ID" \
             -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
@@ -111,7 +111,7 @@ jobs:
           python3 .github/scripts/prepare-release.py archive
       - name: Export IPA
         run: |
-          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/Doorstep.xcarchive" \
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/PorchPong.xcarchive" \
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
             -exportPath "$RUNNER_TEMP/export" \
             -authenticationKeyPath "$APP_STORE_CONNECT_API_KEY_PATH" \
@@ -121,7 +121,7 @@ jobs:
       - name: Upload to TestFlight with Connect API credentials
         if: inputs.upload_build
         run: |
-          IPA_PATH="$RUNNER_TEMP/export/Doorstep.ipa"
+          IPA_PATH="$RUNNER_TEMP/export/PorchPong.ipa"
           test -f "$IPA_PATH"
           xcrun altool --upload-app --type ios --file "$IPA_PATH" \
             --apiKey "$APP_STORE_CONNECT_KEY_ID" \

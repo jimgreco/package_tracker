@@ -14,7 +14,7 @@ if sys.argv[1] == 'project':
     config = {
         'include': ['project.yml'],
         'settings': {'base': {'CURRENT_PROJECT_VERSION': os.environ['IOS_BUILD_NUMBER']}},
-        'targets': {'Doorstep': {'settings': {'configs': {'Release': {
+        'targets': {'PorchPong': {'settings': {'configs': {'Release': {
             'CODE_SIGN_STYLE': 'Manual', 'DEVELOPMENT_TEAM': TEAM,
             'CODE_SIGN_IDENTITY': 'Apple Distribution',
             'PROVISIONING_PROFILE_SPECIFIER': os.environ['IOS_PROFILE_NAME'],
@@ -28,18 +28,18 @@ if sys.argv[1] == 'project':
     with (Path(os.environ['RUNNER_TEMP']) / 'ExportOptions.plist').open('wb') as output:
         plistlib.dump(options, output)
 elif sys.argv[1] == 'archive':
-    app = Path(os.environ['RUNNER_TEMP']) / 'Doorstep.xcarchive/Products/Applications/Doorstep.app'
+    app = Path(os.environ['RUNNER_TEMP']) / 'PorchPong.xcarchive/Products/Applications/PorchPong.app'
     with (app / 'Info.plist').open('rb') as source:
         info = plistlib.load(source)
     assert info['CFBundleIdentifier'] == BUNDLE
     assert info['CFBundleVersion'] == os.environ['IOS_BUILD_NUMBER']
     assert BUNDLE in [s for t in info['CFBundleURLTypes'] for s in t['CFBundleURLSchemes']]
     assert info['ITSAppUsesNonExemptEncryption'] is False
-    assert info['DoorstepAPIOrigin'] == 'https://packages.jim-greco.com'
+    assert info['PorchPongAPIOrigin'] == 'https://packages.jim-greco.com'
     assert not info.get('NSAppTransportSecurity'), 'Release must not contain transport exceptions.'
     assert info['MinimumOSVersion'] == '18.0'
-    assert info['UIDeviceFamily'] == [1], 'Doorstep is an iPhone app; target settings must override XcodeGen defaults.'
-    binary = (app / 'Doorstep').read_bytes()
+    assert info['UIDeviceFamily'] == [1], 'PorchPong is an iPhone app; target settings must override XcodeGen defaults.'
+    binary = (app / 'PorchPong').read_bytes()
     assert b'--fixture' not in binary and b'Sample household' not in binary, 'Fixtures must be absent from Release.'
     subprocess.run(['codesign', '--verify', '--deep', '--strict', str(app)], check=True)
     Path('.build-report').mkdir(exist_ok=True)

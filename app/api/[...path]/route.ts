@@ -165,7 +165,7 @@ async function handle(
         headers: {
           "Content-Type": "text/calendar; charset=utf-8",
           "Cache-Control": "private, max-age=60",
-          "Content-Disposition": 'inline; filename="doorstep.ics"',
+          "Content-Disposition": 'inline; filename="porchpong.ics"',
           "X-Robots-Tag": "noindex",
         },
       });
@@ -213,7 +213,7 @@ async function handle(
       if (!requestContext.nativeSessionHash)
         throw new AppError("Please sign in again.", 401);
       if (["google", "gmail", "auth"].includes(path[0]))
-        throw new AppError("Manage connections on the Doorstep website.", 403);
+        throw new AppError("Manage connections on the PorchPong website.", 403);
     } else if (method !== "GET") checkOrigin(req);
     if (route === "auth/config" && method === "GET")
       return json({ google: googleSigninConfigured() });
@@ -324,7 +324,7 @@ async function handle(
       method === "POST"
     ) {
       if (!ctx.nativeSessionHash)
-        throw new AppError("Use the Doorstep iPhone app.", 403);
+        throw new AppError("Use the PorchPong iPhone app.", 403);
       if (path[2] === "start")
         return json(await nativeCalendarStart(ctx, await jsonBody(req, 4096)));
       if (path[2] === "disconnect") {
@@ -594,7 +594,7 @@ async function handle(
             "X-Doorstep-Household": ctx.householdId,
             "X-Doorstep-User": ctx.userId,
             "Content-Disposition":
-              'attachment; filename="doorstep-export.json"',
+              'attachment; filename="porchpong-export.json"',
             "Cache-Control": "no-store",
           },
         },

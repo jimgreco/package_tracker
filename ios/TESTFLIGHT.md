@@ -1,6 +1,6 @@
 # TestFlight releases
 
-Doorstep follows Wardrobe's GitHub Actions release pattern: a dedicated Mac
+PorchPong follows Wardrobe's GitHub Actions release pattern: a dedicated Mac
 runner, App Store Connect API authentication, temporary distribution signing,
 archive/export/upload, and verification of the exact build's internal testing
 availability. The app remains Google-login-only. Gmail and Calendar connection
@@ -43,7 +43,7 @@ at least the commit count and greater than every prior uploaded integer build.
 - Apple team: `V6JPQCD336`; bundle and callback scheme: `com.jimgreco.doorstep`.
 - Version: 1.0; minimum iOS 18.0; one iPhone app target, no extension or additional
   signing capabilities. Google login uses the server's existing web OAuth flow.
-- App Store Connect: [Doorstep Package Tracker, 6813927476](https://appstoreconnect.apple.com/apps/6813927476/testflight/ios).
+- App Store Connect: [PorchPong Package Tracker, 6813927476](https://appstoreconnect.apple.com/apps/6813927476/testflight/ios).
   The explicit identifier and Owner internal group were created on Apple’s website;
   automatic distribution is enabled. Add only the account owner as an internal tester.
 - Standard system encryption is declared in `ITSAppUsesNonExemptEncryption=false`.
@@ -54,7 +54,7 @@ at least the commit count and greater than every prior uploaded integer build.
   `KEYCHAIN_PASSWORD`.
 
 The existing team credentials were transferred from Wardrobe by sealing their
-values to Doorstep's GitHub environment public key on the source runner. Plaintext
+values to PorchPong's GitHub environment public key on the source runner. Plaintext
 values did not leave that runner or enter source, logs, or local credential files.
 The temporary source branch was removed; Wardrobe's main branch was unchanged.
 The workflow never adds testers, submits an App Store release, or manages Google
@@ -89,7 +89,7 @@ P12 and installed profile. The Release archive check verifies the production
 origin, callback, iOS version, signature, and absence of fixtures/ATS exceptions.
 
 Evidence, IPA and archive are retained locally in
-`~/Library/Logs/DoorstepReleases/<run-id>-<attempt>/<job>/`. These files are not
+`~/Library/Logs/PorchPongReleases/<run-id>-<attempt>/<job>/`. These files are not
 selected as GitHub artifacts or included in backend images. Release-helper tests
 use synthetic keys and mocked Apple responses:
 

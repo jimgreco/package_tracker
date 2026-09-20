@@ -170,7 +170,7 @@ export function calendarFeed(
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//Doorstep//Package Deliveries//EN",
+    "PRODID:-//PorchPong//Package Deliveries//EN",
     "CALSCALE:GREGORIAN",
     "X-WR-CALNAME:Package Deliveries",
   ];

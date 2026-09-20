@@ -573,7 +573,7 @@ export function AuthForm({
       {googleAvailable === false && (
         <div className="info-box">
           Google sign-in is awaiting configuration by the person hosting
-          Doorstep.
+          PorchPong.
         </div>
       )}
       {error && (

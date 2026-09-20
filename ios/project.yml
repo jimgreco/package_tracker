@@ -1,4 +1,4 @@
-name: Doorstep
+name: PorchPong
 options:
   deploymentTarget:
     iOS: '18.0'
@@ -14,48 +14,48 @@ settings:
     CODE_SIGN_STYLE: Automatic
     ENABLE_USER_SCRIPT_SANDBOXING: YES
 targets:
-  Doorstep:
+  PorchPong:
     type: application
     platform: iOS
     sources:
-      - path: Doorstep
+      - path: PorchPong
         excludes: ["Info*.plist"]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jimgreco.doorstep
-        CODE_SIGN_ENTITLEMENTS: Doorstep/Doorstep.entitlements
+        CODE_SIGN_ENTITLEMENTS: PorchPong/PorchPong.entitlements
         TARGETED_DEVICE_FAMILY: '1'
         GENERATE_INFOPLIST_FILE: NO
-        INFOPLIST_FILE: Doorstep/Info.plist
+        INFOPLIST_FILE: PorchPong/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         DOORSTEP_API_ORIGIN: https://packages.jim-greco.com
       configs:
         Debug:
           APNS_ENVIRONMENT: development
-          INFOPLIST_FILE: Doorstep/Info-Debug.plist
+          INFOPLIST_FILE: PorchPong/Info-Debug.plist
         Release:
           APNS_ENVIRONMENT: production
-          INFOPLIST_FILE: Doorstep/Info.plist
+          INFOPLIST_FILE: PorchPong/Info.plist
     scheme:
-      testTargets: [DoorstepTests, DoorstepUITests]
-  DoorstepTests:
+      testTargets: [PorchPongTests, PorchPongUITests]
+  PorchPongTests:
     type: bundle.unit-test
     platform: iOS
-    sources: [DoorstepTests]
+    sources: [PorchPongTests]
     dependencies:
-      - target: Doorstep
+      - target: PorchPong
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jimgreco.doorstep.tests
         GENERATE_INFOPLIST_FILE: YES
-  DoorstepUITests:
+  PorchPongUITests:
     type: bundle.ui-testing
     platform: iOS
-    sources: [DoorstepUITests]
+    sources: [PorchPongUITests]
     dependencies:
-      - target: Doorstep
+      - target: PorchPong
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jimgreco.doorstep.uitests
         GENERATE_INFOPLIST_FILE: YES
-        TEST_TARGET_NAME: Doorstep
+        TEST_TARGET_NAME: PorchPong

@@ -34,7 +34,7 @@ export async function googleSigninStart(
 ) {
   if (!googleSigninConfigured())
     throw new AppError(
-      "Google sign-in needs to be configured by the person hosting Doorstep. Please ask them to connect the Google OAuth client.",
+      "Google sign-in needs to be configured by the person hosting PorchPong. Please ask them to connect the Google OAuth client.",
       503,
     );
   z.object({}).strict().parse(input);

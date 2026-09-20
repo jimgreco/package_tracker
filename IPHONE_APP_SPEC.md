@@ -1,10 +1,10 @@
-# Doorstep for iPhone
+# PorchPong for iPhone
 
 Implementation specification · 2026-09-19
 
 ## 1. Outcome
 
-Build a polished native iPhone app for the existing Doorstep household package
+Build a polished native iPhone app for the existing PorchPong household package
 tracker. A user signs in with Google and immediately sees the same packages,
 source emails, household, and connections as on the website. Package ingestion,
 extraction, carrier checks, and calendar updates continue on the server while
@@ -35,7 +35,7 @@ where necessary; keep one service and one source of truth.
 - SwiftUI, Swift concurrency, Observation, and `URLSession`.
 - iPhone first; minimum iOS 18. Build with the installed supported Xcode/SDK and
   use availability checks for newer APIs.
-- App name: **Doorstep**. Proposed bundle identifier: `com.jimgreco.doorstep`;
+- App name: **PorchPong**. Proposed bundle identifier: `com.jimgreco.doorstep`;
   confirm availability in the existing Apple signing setup before registering it.
 - Production API origin: `https://packages.jim-greco.com`.
 - Local web API: `http://127.0.0.1:4317` for simulator development. A physical
@@ -83,7 +83,7 @@ responses separately rather than assuming every email has a processing status.
 Use three tabs: **Packages**, **Inbox**, and **Settings**. Each has its own native
 navigation stack. Present create/edit forms as sheets. Use system typography,
 SF Symbols, native menus, swipe actions, search, and pull-to-refresh. Carry forward
-Doorstep's existing icon and visual character while adapting the layout to iPhone.
+PorchPong's existing icon and visual character while adapting the layout to iPhone.
 
 Support light/dark appearance, Dynamic Type, VoiceOver, Reduce Motion, and at
 least 44-point tap targets. Status must be understandable without color. Long
@@ -154,7 +154,7 @@ user confirms. Preserve the existing server merge semantics and source history;
 do not infer a merge solely from similar item names or an order-number prefix.
 
 Opening a tracking link is a user action through the system browser. Do not
-attach Doorstep authorization to that request. Render source email text safely;
+attach PorchPong authorization to that request. Render source email text safely;
 do not execute or display raw email HTML in a web view.
 
 ### Add/edit package
@@ -197,7 +197,7 @@ Display server validation errors next to relevant controls when possible.
 - Google Calendar: show existing connection, last sync, and error/reconnect state.
   Connection setup and management stay on the website. Explain how to enable the
   generated Google calendar in Apple Calendar. Do not request EventKit access.
-- Offer a normal **Manage connections on website** link to Doorstep settings if
+- Offer a normal **Manage connections on website** link to PorchPong settings if
   useful. Safari may require its own login; do not build a native-to-web session
   transfer or provider-consent handoff for this link.
 - ICS feed: explicit copy/share and rotate-link actions. Treat the feed link as
@@ -233,8 +233,8 @@ poll carriers from the phone. Keep stable server shipment and calendar IDs.
 
 ### Chosen approach
 
-Use `ASWebAuthenticationSession` to run Doorstep's server-hosted Google sign-in,
-then exchange a short-lived completion code for a native Doorstep session.
+Use `ASWebAuthenticationSession` to run PorchPong's server-hosted Google sign-in,
+then exchange a short-lived completion code for a native PorchPong session.
 This reuses verified Google identity and membership resolution. The iPhone never
 receives the Google web client secret or the service's Google refresh tokens.
 
@@ -246,9 +246,9 @@ and [Apple Authentication Services](https://developer.apple.com/documentation/au
 ### Login sequence
 
 1. The app generates an unpredictable state and a PKCE verifier/challenge for
-   the Doorstep-to-app handoff. It retains the verifier locally for this attempt.
+   the PorchPong-to-app handoff. It retains the verifier locally for this attempt.
 2. `POST /api/native/auth/start` accepts the state and S256 challenge and returns
-   a short-lived authorization URL on the Doorstep production origin. Callback
+   a short-lived authorization URL on the PorchPong production origin. Callback
    destinations are fixed/allowlisted server configuration, not arbitrary URLs.
 3. The app opens that URL with `ASWebAuthenticationSession`. The browser entry
    establishes browser-bound state/cookies before redirecting to Google. Reuse
@@ -261,7 +261,7 @@ and [Apple Authentication Services](https://developer.apple.com/documentation/au
 5. The app verifies state, then sends the code and verifier to
    `POST /api/native/auth/exchange`. Consume the code atomically only with the
    matching challenge. Codes expire within two minutes and are replay protected.
-6. Return an opaque Doorstep bearer session plus expiry and account/session
+6. Return an opaque PorchPong bearer session plus expiry and account/session
    identity. Store only its hash on the server, and the token in iOS Keychain
    using device-only storage. A 30-day session matches the existing web session
    policy; expiration requests a fresh Google sign-in. A refresh-token subsystem
@@ -358,8 +358,8 @@ Suggested layout (adapt modestly to existing local iOS conventions):
 ```text
 ios/
   README.md
-  Doorstep.xcodeproj/          # or a reproducibly generated project plus its config
-  Doorstep/
+  PorchPong.xcodeproj/          # or a reproducibly generated project plus its config
+  PorchPong/
     App/                      # app entry, configuration, root state/navigation
     Models/                   # API DTOs, status and date/estimate presentation
     Networking/               # API client, error mapping, authenticated images
@@ -370,8 +370,8 @@ ios/
       Inbox/
       Settings/
     Resources/                # asset catalog, localization, privacy manifest as needed
-  DoorstepTests/
-  DoorstepUITests/
+  PorchPongTests/
+  PorchPongUITests/
 ```
 
 - Use an actor or equivalent serialization for credentials and network state,
@@ -397,7 +397,7 @@ ios/
   a manual-create idempotency key when retrying the same unresolved save.
 - Authenticated `/api/assets/:id` images need an image loader using the API session;
   a plain unauthenticated image request may fail. Send credentials only to the
-  configured Doorstep origin and reject credential-bearing cross-origin redirects.
+  configured PorchPong origin and reject credential-bearing cross-origin redirects.
 - Keep public configuration in build settings/xcconfig. No service credentials,
   production tokens, user email samples, or signing secrets enter Git or the IPA.
 - Release builds use production HTTPS and must not expose a demo-auth bypass or
@@ -471,7 +471,7 @@ separate from a successful archive or upload.
 Public distribution needs an explicit authentication-policy decision if required:
 Apple's current [Login Services guideline 4.8](https://developer.apple.com/app-store/review/guidelines/#login-services)
 places conditions on Google-only primary login and lists exceptions. Do not assume
-Doorstep qualifies for an exception or silently add Apple login against the
+PorchPong qualifies for an exception or silently add Apple login against the
 Google-only product requirement. Before public submission, resolve that decision
 and applicable account-deletion/privacy requirements. This does not block native
 development and direct device testing.

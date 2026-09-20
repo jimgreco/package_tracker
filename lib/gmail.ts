@@ -206,7 +206,7 @@ export async function gmailCallback(ctx: Context, req: Request) {
     ).rows;
     if (!user || user.google_subject !== subject)
       throw new AppError(
-        "Connect the same Google account you use to sign in to Doorstep.",
+        "Connect the same Google account you use to sign in to PorchPong.",
         403,
       );
     const [existing] = (
@@ -332,7 +332,7 @@ async function gmailRequest(token: string, path: string) {
       )
     )
       throw new AppError(
-        "Gmail is busy. Doorstep will retry automatically.",
+        "Gmail is busy. PorchPong will retry automatically.",
         502,
       );
     throw new GmailAccessError(
@@ -342,7 +342,7 @@ async function gmailRequest(token: string, path: string) {
   if (response.status === 404) return null; // Deleted between listing and fetching.
   if (!response.ok)
     throw new AppError(
-      `Gmail is temporarily unavailable (${response.status}). Doorstep will retry.`,
+      `Gmail is temporarily unavailable (${response.status}). PorchPong will retry.`,
       502,
     );
   return response.json();
@@ -446,7 +446,7 @@ export async function syncGmail(connectionId: string, generation: string) {
           );
           if (!body)
             throw new AppError(
-              "A Gmail message body is unavailable. Doorstep will retry.",
+              "A Gmail message body is unavailable. PorchPong will retry.",
               502,
             );
           part.body.data = body.data;
@@ -513,7 +513,7 @@ export async function syncGmail(connectionId: string, generation: string) {
     const message =
       e instanceof AppError
         ? e.message
-        : "Gmail check failed. Doorstep will retry automatically.";
+        : "Gmail check failed. PorchPong will retry automatically.";
     await query(
       "UPDATE gmail_connections SET error=$3,needs_reconnect=$4,next_sync_at=now()+interval '5 minutes' WHERE id=$1 AND generation=$2",
       [connectionId, generation, message, permanent],

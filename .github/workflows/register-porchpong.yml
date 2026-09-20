@@ -1,0 +1,27 @@
+name: Register PorchPong App Name
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/workflows/register-porchpong.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  register:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: production
+    env:
+      IOS_BUNDLE_ID: com.jimgreco.doorstep
+      APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Configure App Store Connect access
+        run: bash .github/scripts/configure-connect-key.sh
+      - name: Register PorchPong
+        run: node .github/scripts/testflight.mjs rename PorchPong en-US

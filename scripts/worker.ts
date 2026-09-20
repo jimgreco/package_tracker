@@ -9,7 +9,7 @@ process.on("SIGTERM", () => {
 });
 let lastSchedule = 0;
 console.log(
-  "Doorstep worker started. Processing durable jobs and checking active shipments.",
+  "PorchPong worker started. Processing durable jobs and checking active shipments.",
 );
 while (running) {
   try {

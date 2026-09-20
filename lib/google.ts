@@ -189,7 +189,7 @@ async function ensureCalendar(householdId: string) {
     if (!g.calendar_id) {
       const res = await calendarRequest(token, "/calendars", "POST", {
         summary: "Package Deliveries",
-        description: "Delivery estimates and updates maintained by Doorstep.",
+        description: "Delivery estimates and updates maintained by PorchPong.",
         timeZone: g.time_zone,
       });
       if (!res.ok)
@@ -271,7 +271,7 @@ export async function syncShipment(id: string) {
         reminders: { useDefault: false },
         extendedProperties: { private: { doorstepShipmentId: id } },
         source: {
-          title: "View in Doorstep",
+          title: "View in PorchPong",
           url: `${origin()}/?shipment=${id}`,
         },
       };

@@ -485,13 +485,13 @@ export function SettingsView({
           </span>
         </div>
         <p>
-          Doorstep maintains a separate <strong>Package Deliveries</strong>{" "}
+          PorchPong maintains a separate <strong>Package Deliveries</strong>{" "}
           calendar. Add your Google account to Apple Calendar to see it there,
           too.
         </p>
         <div className="permission-note">
           <ShieldCheck size={20} />
-          <span>Access is limited to calendars created by Doorstep.</span>
+          <span>Access is limited to calendars created by PorchPong.</span>
         </div>
         {s.google.error && <div className="form-error">{s.google.error}</div>}
         {s.google.connected ? (
@@ -637,7 +637,7 @@ export function SettingsView({
         <details className="setup-details">
           <summary>Service setup</summary>
           <p>
-            The person hosting Doorstep can connect these services in the
+            The person hosting PorchPong can connect these services in the
             server’s environment configuration. The project README includes the
             exact steps.
           </p>

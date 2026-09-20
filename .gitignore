@@ -17,7 +17,7 @@ ios/**/*.xcuserstate
 ios/**/xcuserdata/
 *.xcresult/
 output/ios/
-ios/Doorstep [0-9]*.xcodeproj/
+ios/PorchPong [0-9]*.xcodeproj/
 
 ios/ci-project.yml
 .build-report/

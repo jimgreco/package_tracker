@@ -1,4 +1,4 @@
-# Doorstep
+# PorchPong
 
 A shared household package tracker. Forward a shipping email, review the extracted order and shipments, and follow delivery updates on the web and in Google Calendar (including Apple Calendar through your Google account).
 
@@ -33,7 +33,7 @@ In another terminal:
 npm run worker
 ```
 
-Open [Doorstep locally](http://127.0.0.1:4317).
+Open [PorchPong locally](http://127.0.0.1:4317).
 
 `setup:local` creates an ignored `.env`, random setup/encryption secrets, a dedicated PostgreSQL cluster in `.local/postgres` listening **only on 127.0.0.1:55439**, and the sample household. It does not access a shared PostgreSQL server. Local database authentication uses trust only on this loopback development cluster. Do not expose that cluster remotely.
 
@@ -47,9 +47,9 @@ To stop the dedicated local database:
 
 ## Accounts and household members
 
-1. Configure the Google OAuth client below, then choose **Continue with Google**. There are no Doorstep passwords, setup codes, or invite codes.
+1. Configure the Google OAuth client below, then choose **Continue with Google**. There are no PorchPong passwords, setup codes, or invite codes.
 2. First sign-in creates a private household automatically. If an owner already added your Google email, you join their household instead.
-3. In **Settings → Household members**, the owner enters another member’s Gmail or Google Workspace email. The pending membership becomes active when that person signs in with their own Google account. Doorstep does not send an invitation email.
+3. In **Settings → Household members**, the owner enters another member’s Gmail or Google Workspace email. The pending membership becomes active when that person signs in with their own Google account. PorchPong does not send an invitation email.
 4. Existing users retain their household and gain access to the shared household on their next sign-in. Choose the current household in **Settings → Your account**. Package data stays separate.
 5. The owner can cancel pending members or remove joined members. Removed members lose access and return to another household they belong to, or a new empty personal household. The owner cannot remove themselves.
 
@@ -74,7 +74,7 @@ Set `OPENAI_API_KEY`. `OPENAI_MODEL` defaults to `gpt-4.1-mini` and can be set t
 3. Set the stream's inbound webhook URL to:
    `https://USERNAME:PASSWORD@YOUR_HOST/api/webhooks/postmark`
 4. Use HTTP Basic authentication over HTTPS. If supported by your deployment edge, also allowlist Postmark's published webhook IP ranges. This app does not trust client-supplied forwarding headers for IP authentication.
-5. Copy the address in Doorstep Settings and forward a real shipping email. The server routes by the envelope recipient's private `packages+TOKEN` alias and configured domain.
+5. Copy the address in PorchPong Settings and forward a real shipping email. The server routes by the envelope recipient's private `packages+TOKEN` alias and configured domain.
 
 Message content is saved before its parse job is acknowledged. Duplicate webhook deliveries return the existing email. Non-image attachments are ignored in v1; supported inline images are JPEG, PNG, WebP, and GIF, up to 5 MB each. Total webhook input is bounded at 25 MB. HTML is never rendered in the application.
 
@@ -117,13 +117,13 @@ Restart both web and worker after changing credentials. Use Refresh on existing 
 
 Sign-in requests only `openid email profile`. It uses authorization code flow with PKCE, browser-bound one-use state, a nonce, and server-side signed ID-token validation (Google keys, issuer, audience, expiry, authorized party, nonce, and verified email). Identity access tokens are not persisted. Sessions are HttpOnly, SameSite=Lax, and Secure on HTTPS.
 
-The separate Calendar connection requests only `https://www.googleapis.com/auth/calendar.app.created`. It creates **Package Deliveries** and manages that calendar's events. It does not request access to unrelated calendars. The worker creates/updates events after changes; a disconnected or expired account shows a reconnection message. Disconnecting deletes Doorstep's stored credentials and leaves the existing calendar in your Google account. Reconnecting to the same calendar must use its owning account. Switching accounts requires disconnecting first and creates a new delivery calendar.
+The separate Calendar connection requests only `https://www.googleapis.com/auth/calendar.app.created`. It creates **Package Deliveries** and manages that calendar's events. It does not request access to unrelated calendars. The worker creates/updates events after changes; a disconnected or expired account shows a reconnection message. Disconnecting deletes PorchPong's stored credentials and leaves the existing calendar in your Google account. Reconnecting to the same calendar must use its owning account. Switching accounts requires disconnecting first and creates a new delivery calendar.
 
 #### Optional automatic Gmail import
 
 Enable the Gmail API in the same Google Cloud project, add the Gmail callback above to the existing web client, and declare `https://www.googleapis.com/auth/gmail.readonly` in Data Access. Set `GMAIL_ENABLED=true` in the private server environment after setup. For a personal-use rollout, set `GMAIL_HOUSEHOLD_ID` to the allowed household UUID; connection routes and background ingestion then reject other households. Leave it unset only for a rollout with the applicable Google verification. No new API key is needed. Sign-in and Calendar continue requesting their original scopes; Gmail separately requests `openid email gmail.readonly` with browser-bound state, PKCE, nonce, verified signed identity, and the same Google subject as the signed-in user.
 
-In Settings → Automatic package import, each member chooses **New emails only** (default) or **Last 30 days and new emails**, then connects their own inbox. Matching source messages and extracted packages are shared with the selected household and processed by OpenAI; this disclosure appears before connecting. Google grants mailbox-wide read access, while Doorstep limits ingestion using a shipping/order search. Filters are heuristic: they may miss messages or include unrelated ones. Existing manual forwarding remains available.
+In Settings → Automatic package import, each member chooses **New emails only** (default) or **Last 30 days and new emails**, then connects their own inbox. Matching source messages and extracted packages are shared with the selected household and processed by OpenAI; this disclosure appears before connecting. Google grants mailbox-wide read access, while PorchPong limits ingestion using a shipping/order search. Filters are heuristic: they may miss messages or include unrelated ones. Existing manual forwarding remains available.
 
 The durable worker polls every five minutes with fixed scan windows, pagination checkpoints, a one-day overlap for delayed indexing, and stable mailbox/message deduplication. Already imported sources re-use the existing extraction and shipment matching pipeline. Gmail messages are never marked read, modified, or sent. Checks continue while the browser is closed and catch up after downtime. This version uses polling, not Pub/Sub; attachments other than message text are not imported, while images referenced by the HTML use the existing image pipeline.
 
@@ -205,7 +205,7 @@ Live acceptance still requires real accounts and representative emails:
 
 ## Package list and inbox
 
-Packages sort newest first by their earliest source-email sent date (falling back to import time); manual packages use creation time. Later tracking updates do not move packages to the top. The inbox shows **Sent** dates in the household time zone and distinguishes the Doorstep import time in email details.
+Packages sort newest first by their earliest source-email sent date (falling back to import time); manual packages use creation time. Later tracking updates do not move packages to the top. The inbox shows **Sent** dates in the household time zone and distinguishes the PorchPong import time in email details.
 
 **Mark delivered** confirms receipt without inventing a delivery date; edit details to supply one. **Dismiss** hides a package from active lists and calendars and stops tracking checks. Restore it from **Dismissed**. Nonphysical receipts are ignored by extraction and hidden from the shipping inbox while source records remain stored. Physical orders without tracking and recurring physical deliveries remain eligible.
 
@@ -284,7 +284,7 @@ server tests and simulator UI tests do not establish live APNs delivery.
 
 In Settings → Google Calendar, choose **Connect Google Calendar** (or
 **Reconnect Google Calendar**), complete Google consent in the system
-authentication browser, and return to Doorstep. No separate Doorstep browser
+authentication browser, and return to PorchPong. No separate PorchPong browser
 sign-in is needed. **Sync deliveries now** queues a background refresh.
 **Disconnect Google Calendar** stops updates for the household and leaves the
 existing calendar and its events in Google.

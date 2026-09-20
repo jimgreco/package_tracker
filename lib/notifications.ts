@@ -114,7 +114,7 @@ export async function scheduleNotifications() {
       if (added.length && !["failure", "delayed"].includes(row.status))
         await c.query(
           `INSERT INTO push_deliveries(device_id,household_id,shipment_id,category,event_key,message)
-          SELECT d.id,$1,$2,'problems',$3,'A package needs attention. Open Doorstep to review it.' FROM push_devices d
+          SELECT d.id,$1,$2,'problems',$3,'A package needs attention. Open PorchPong to review it.' FROM push_devices d
           JOIN native_sessions n ON n.token_hash=d.session_hash AND n.expires_at>now()
           JOIN notification_preferences p ON p.user_id=d.user_id AND p.household_id=$1
           WHERE p.enabled AND p.problems ON CONFLICT DO NOTHING`,
@@ -225,7 +225,7 @@ export async function sendAPNs(
     request.end(
       JSON.stringify({
         aps: {
-          alert: { title: "Doorstep", body: d.message },
+          alert: { title: "PorchPong", body: d.message },
           sound: "default",
           "thread-id": d.shipment_id,
         },

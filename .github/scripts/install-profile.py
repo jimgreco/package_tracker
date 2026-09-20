@@ -21,4 +21,4 @@ destination = directory / f"{data['UUID']}.mobileprovision"
 with open(os.environ['GITHUB_ENV'], 'a') as output:
     output.write(f"IOS_PROFILE_NAME={data['Name']}\nIOS_PROFILE_PATH={destination}\n")
 shutil.copyfile(profile, destination)
-print('Validated Doorstep App Store profile and matching distribution certificate.')
+print('Validated PorchPong App Store profile and matching distribution certificate.')

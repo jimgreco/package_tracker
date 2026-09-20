@@ -33,7 +33,7 @@ export function GmailSettings({
     if (
       value === "disconnect" &&
       !window.confirm(
-        "Disconnect your Gmail from this household? New imports stop. Already imported emails and packages stay in Doorstep.",
+        "Disconnect your Gmail from this household? New imports stop. Already imported emails and packages stay in PorchPong.",
       )
     )
       return;
@@ -78,7 +78,7 @@ export function GmailSettings({
         </span>
       </div>
       <p>
-        Connect your Gmail once. Doorstep checks for order confirmations and
+        Connect your Gmail once. PorchPong checks for order confirmations and
         shipping updates every five minutes, even when the app is closed.
       </p>
       {g.connected ? (
@@ -159,7 +159,7 @@ export function GmailSettings({
             <GoogleMark />
             <span>
               Optional read-only access for <strong>{s.account.email}</strong>.
-              Google grants mailbox-wide read access; Doorstep filters for
+              Google grants mailbox-wide read access; PorchPong filters for
               likely order and shipping emails. It cannot send, change, or
               delete your mail.
             </span>

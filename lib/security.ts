@@ -59,7 +59,7 @@ export function origin() {
 export function checkOrigin(req: Request) {
   const value = req.headers.get("origin");
   if (!value || value !== origin())
-    throw new AppError("This request must come from your Doorstep app.", 403);
+    throw new AppError("This request must come from your PorchPong app.", 403);
 }
 export async function rateLimit(key: string, limit: number, seconds: number) {
   const rows = await query(

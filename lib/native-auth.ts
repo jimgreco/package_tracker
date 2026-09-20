@@ -54,7 +54,7 @@ export async function nativeAuthorize(req: Request) {
     [hash(launch)],
   );
   if (!attempt)
-    throw new AppError("Sign-in expired. Return to Doorstep and try again.");
+    throw new AppError("Sign-in expired. Return to PorchPong and try again.");
   return googleSigninStart(req, {}, attempt.id);
 }
 export async function nativeCallbackAttempt(req: Request) {

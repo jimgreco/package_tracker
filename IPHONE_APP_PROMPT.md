@@ -1,7 +1,7 @@
 # Prompt for a new Codex context
 
 ```text
-Build the native Doorstep iPhone app in this repository:
+Build the native PorchPong iPhone app in this repository:
 /Users/jgreco/Documents/ChatGPT/package_tracker
 
 Read AGENTS.md and IPHONE_APP_SPEC.md first, then inspect current source and git
@@ -9,7 +9,7 @@ status. Implement the complete first release described in the spec under ios/,
 including the required backend changes. This is an implementation task, not a
 request for another plan or a mockup.
 
-Use SwiftUI and the existing Doorstep server at https://packages.jim-greco.com.
+Use SwiftUI and the existing PorchPong server at https://packages.jim-greco.com.
 Preserve Google-only accounts, household membership, original-email timeline
 ordering, dismiss/restore behavior, package identity rules, and Google Calendar
 sync. Tracking, Gmail ingestion, and extraction stay on the server. Implement

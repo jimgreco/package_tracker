@@ -39,19 +39,19 @@ are changed, and `ios/` is excluded from the Docker context.
 
 Final archive and development IPA:
 
-- `~/Library/Developer/Xcode/Archives/2026-09-19/Doorstep.xcarchive`
-- `~/Library/Developer/Xcode/Archives/2026-09-19/Doorstep-device/Doorstep.ipa`
+- `~/Library/Developer/Xcode/Archives/2026-09-19/PorchPong.xcarchive`
+- `~/Library/Developer/Xcode/Archives/2026-09-19/PorchPong-device/PorchPong.ipa`
 
 These are development distribution artifacts, not a TestFlight or App Store
 submission. Device build outputs stay outside Git and Docker. The source uses the
-existing Doorstep icon, production origin, native callback, and Apple team.
+existing PorchPong icon, production origin, native callback, and Apple team.
 
 ## Still requires the user/device
 
 The device inventory reported Jim's iPhone as **unavailable**. Connect and unlock
 it, install/run the development build using `ios/README.md`, and complete Google
 consent/MFA personally. Then confirm the existing household and source emails,
-real provider updates, and Doorstep calendar appearance in Apple Calendar.
+real provider updates, and PorchPong calendar appearance in Apple Calendar.
 
 No physical-device login, live provider acceptance, TestFlight availability,
 App Store acceptance, or audible VoiceOver walkthrough is claimed. The simulator

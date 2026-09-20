@@ -12,7 +12,7 @@ export function calendarBrowserCookie(value = "") {
 export async function nativeCalendarStart(ctx: Context, input: unknown) {
   requireReal(ctx);
   if (!ctx.nativeSessionHash)
-    throw new AppError("Use the Doorstep iPhone app to connect Calendar.", 403);
+    throw new AppError("Use the PorchPong iPhone app to connect Calendar.", 403);
   const { state } = z
     .object({ state: z.string().regex(/^[A-Za-z0-9_-]{43,128}$/) })
     .strict()
@@ -40,7 +40,7 @@ async function attemptContext(id: string): Promise<Context> {
   );
   if (!r)
     throw new AppError(
-      "Your sign-in or household changed. Return to Doorstep and connect again.",
+      "Your sign-in or household changed. Return to PorchPong and connect again.",
       403,
     );
   return {
@@ -68,7 +68,7 @@ export async function nativeCalendarAuthorize(req: Request) {
   );
   if (!n)
     throw new AppError(
-      "Calendar authorization expired. Return to Doorstep and connect again.",
+      "Calendar authorization expired. Return to PorchPong and connect again.",
       400,
     );
   const ctx = await attemptContext(n.id);
@@ -89,7 +89,7 @@ export async function nativeCalendarCallback(
   const browser = requestCookie(req, cookieName);
   if (!browser || n.browser_hash !== hash(browser))
     throw new AppError(
-      "Calendar authorization could not be verified. Return to Doorstep and try again.",
+      "Calendar authorization could not be verified. Return to PorchPong and try again.",
       403,
     );
   const [claimed] = await query(
@@ -98,7 +98,7 @@ export async function nativeCalendarCallback(
   );
   if (!claimed)
     throw new AppError(
-      "Calendar authorization expired. Return to Doorstep and try again.",
+      "Calendar authorization expired. Return to PorchPong and try again.",
       400,
     );
   let result = "connected";

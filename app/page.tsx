@@ -110,7 +110,7 @@ export default function Page() {
       notify("Google connected. Your delivery calendar is being prepared.");
     if (p.get("gmailError")) notify(p.get("gmailError")!, true);
     else if (p.get("gmail") === "connected")
-      notify("Gmail connected. Doorstep is checking for packages.");
+      notify("Gmail connected. PorchPong is checking for packages.");
     void reload();
     const timer = setInterval(() => {
       if (document.visibilityState === "visible") void reload();
@@ -294,7 +294,7 @@ export default function Page() {
           <span className="brand-icon">
             <Package size={22} />
           </span>
-          doorstep<span className="brand-period">.</span>
+          PorchPong<span className="brand-period">.</span>
         </a>
         <nav aria-label="Main navigation">
           {(
@@ -1312,7 +1312,7 @@ export default function Page() {
                 ? `Email sent ${new Date(email.sentAt).toLocaleString("en-US", { timeZone: data?.settings.timeZone })}`
                 : "Original sent date unavailable"}
               <br />
-              Imported into Doorstep{" "}
+              Imported into PorchPong{" "}
               {new Date(email.receivedAt).toLocaleString("en-US", {
                 timeZone: data?.settings.timeZone,
               })}
