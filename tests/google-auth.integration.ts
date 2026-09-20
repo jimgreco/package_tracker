@@ -48,6 +48,7 @@ before(async () => {
     "008_retailer_reference.sql",
     "009_native_sessions.sql",
     "010_delivery_features.sql",
+    "011_native_calendar.sql",
   ])
     await query(await readFile("db/" + file, "utf8"));
   keys = await generateKeyPair("RS256");
@@ -938,4 +939,197 @@ test("native bearer isolation, Origin separation, revocation and atomic manual c
     await query("SELECT * FROM gmail_connections ORDER BY user_id"),
     gmailBefore,
   );
+});
+
+test("native Calendar consent is browser-bound, scoped, retry-safe and independent of Gmail", async () => {
+  const login = await nativeCode();
+  const session = await (
+    await nativeCall("native/auth/exchange", login.body)
+  ).json();
+  const gmailBefore = await query(
+    "SELECT * FROM gmail_connections ORDER BY user_id",
+  );
+  async function begin() {
+    const appState = randomToken();
+    const start = await nativeCall(
+      "native/calendar/start",
+      { state: appState },
+      session.token,
+      { "x-doorstep-household": session.householdId },
+    );
+    assert.equal(start.status, 200);
+    const launch = new URL((await start.json()).url);
+    const path = launch.pathname.replace("/api/", "") + launch.search;
+    const opened = await nativeCall(path);
+    assert.equal(opened.status, 307);
+    const consent = new URL(opened.headers.get("location")!);
+    assert.equal(
+      consent.searchParams.get("scope"),
+      "https://www.googleapis.com/auth/calendar.app.created",
+    );
+    assert.equal(
+      consent.searchParams.get("redirect_uri"),
+      appUrl + "/api/google/callback",
+    );
+    assert.equal(consent.searchParams.get("code_challenge_method"), "S256");
+    assert.equal(
+      (await nativeCall(path)).status,
+      400,
+      "Launch links are single-use",
+    );
+    const state = consent.searchParams.get("state")!;
+    const [saved] = await query(
+      "SELECT verifier FROM oauth_states WHERE state_hash=$1",
+      [hash(state)],
+    );
+    return {
+      appState,
+      state,
+      verifier: decrypt(saved.verifier),
+      cookie: opened.headers.get("set-cookie")!.split(";")[0],
+    };
+  }
+  const authFetch = globalThis.fetch;
+  let expectedVerifier = "",
+    exchanges = 0;
+  globalThis.fetch = async (input, options) => {
+    if (String(input) === "https://oauth2.googleapis.com/token") {
+      exchanges++;
+      const params = new URLSearchParams(options?.body as URLSearchParams);
+      assert.equal(params.get("redirect_uri"), appUrl + "/api/google/callback");
+      assert.equal(params.get("code_verifier"), expectedVerifier);
+      return Response.json({
+        access_token: "calendar-access",
+        refresh_token: "calendar-refresh",
+        scope: "https://www.googleapis.com/auth/calendar.app.created",
+      });
+    }
+    throw new Error("Unexpected Calendar provider request");
+  };
+  try {
+    const attempt = await begin();
+    expectedVerifier = attempt.verifier;
+    const callback = `google/callback?state=${attempt.state}&code=fixture-calendar`;
+    assert.equal((await nativeCall(callback)).status, 403);
+    assert.equal(exchanges, 0);
+    const connected = await nativeCall(callback, undefined, undefined, {
+      cookie: attempt.cookie,
+    });
+    assert.equal(connected.status, 307);
+    const returned = new URL(connected.headers.get("location")!);
+    assert.equal(returned.protocol, "com.jimgreco.doorstep:");
+    assert.equal(returned.pathname, "/calendar/callback");
+    assert.equal(returned.searchParams.get("state"), attempt.appState);
+    assert.equal(returned.searchParams.get("result"), "connected");
+    assert.ok(!returned.searchParams.has("code"));
+    assert.equal(exchanges, 1);
+    assert.notEqual(
+      (
+        await nativeCall(callback, undefined, undefined, {
+          cookie: attempt.cookie,
+        })
+      ).status,
+      307,
+    );
+    assert.equal(exchanges, 1);
+    let [connection] = await query(
+      "SELECT * FROM google_connections WHERE household_id=$1",
+      [session.householdId],
+    );
+    assert.equal(decrypt(connection.refresh_token), "calendar-refresh");
+    assert.equal(
+      (await nativeCall("native/calendar/sync", {}, session.token)).status,
+      200,
+    );
+    const cancelled = await begin();
+    const denied = await nativeCall(
+      `google/callback?state=${cancelled.state}&error=access_denied`,
+      undefined,
+      undefined,
+      { cookie: cancelled.cookie },
+    );
+    assert.equal(
+      new URL(denied.headers.get("location")!).searchParams.get("result"),
+      "cancelled",
+    );
+    assert.equal(exchanges, 1);
+    assert.equal(
+      (
+        await query("SELECT * FROM google_connections WHERE household_id=$1", [
+          session.householdId,
+        ])
+      ).length,
+      1,
+    );
+    const pending = await begin();
+    assert.equal(
+      (await nativeCall("native/calendar/disconnect", {}, session.token))
+        .status,
+      200,
+    );
+    assert.equal(
+      (
+        await query("SELECT * FROM google_connections WHERE household_id=$1", [
+          session.householdId,
+        ])
+      ).length,
+      0,
+    );
+    assert.notEqual(
+      (
+        await nativeCall(
+          `google/callback?state=${pending.state}&code=fixture`,
+          undefined,
+          undefined,
+          { cookie: pending.cookie },
+        )
+      ).status,
+      307,
+    );
+    assert.equal(exchanges, 1, "Disconnect invalidates unfinished consent");
+    assert.equal(
+      (await nativeCall("native/calendar/sync", {}, session.token)).status,
+      400,
+    );
+    assert.equal(
+      (await nativeCall("gmail/connect", {}, session.token)).status,
+      403,
+    );
+    assert.deepEqual(
+      await query("SELECT * FROM gmail_connections ORDER BY user_id"),
+      gmailBefore,
+    );
+    const expired = await begin();
+    await query(
+      "UPDATE native_calendar_attempts SET expires_at=now()-interval '1 second' WHERE session_hash=$1",
+      [hash(session.token)],
+    );
+    assert.equal(
+      (
+        await nativeCall(
+          `google/callback?state=${expired.state}&code=fixture`,
+          undefined,
+          undefined,
+          { cookie: expired.cookie },
+        )
+      ).status,
+      400,
+    );
+    const revoked = await begin();
+    await nativeCall("native/auth/logout", {}, session.token);
+    assert.notEqual(
+      (
+        await nativeCall(
+          `google/callback?state=${revoked.state}&code=fixture`,
+          undefined,
+          undefined,
+          { cookie: revoked.cookie },
+        )
+      ).status,
+      307,
+    );
+    assert.equal(exchanges, 1);
+  } finally {
+    globalThis.fetch = authFetch;
+  }
 });

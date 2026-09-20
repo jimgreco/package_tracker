@@ -226,7 +226,8 @@ An optional live extraction regression check uses synthetic emails and makes no 
 
 The SwiftUI client is in [`ios/`](ios/README.md). It uses the same server-owned
 household records, with Google-only native login, package editing, inbox, and
-settings. Gmail and Calendar connections remain managed on the website. See the
+settings. Google Calendar can be connected, reconnected, synced, and disconnected
+in iPhone Settings. Gmail connection setup remains on the website. See the
 [iPhone verification record](ios/VERIFICATION.md) for simulator, signing, and
 release evidence and the remaining physical-device acceptance.
 
@@ -278,3 +279,24 @@ Verify on a physical iPhone with a signed build: enable alerts, authorize an act
 tracking update, receive it while backgrounded, open the correct package, and check
 that disabling a category or removing membership prevents later alerts. Mocked
 server tests and simulator UI tests do not establish live APNs delivery.
+
+### Connect Google Calendar from iPhone
+
+In Settings → Google Calendar, choose **Connect Google Calendar** (or
+**Reconnect Google Calendar**), complete Google consent in the system
+authentication browser, and return to Doorstep. No separate Doorstep browser
+sign-in is needed. **Sync deliveries now** queues a background refresh.
+**Disconnect Google Calendar** stops updates for the household and leaves the
+existing calendar and its events in Google.
+
+This flow reuses the existing web OAuth client, `/api/google/callback`, and
+`calendar.app.created` scope. No new Google redirect URI or Gmail permission is
+needed. The native session creates a short-lived, single-use browser launch;
+consent is bound to its browser cookie, signed-in member, household, and session.
+Only a completion status returns to the app; Google tokens remain encrypted on
+the server. Expiration, logout, membership removal, household switching, and
+disconnect invalidate pending authorization. Gmail remains website-managed.
+
+Validate real consent on an iPhone, then confirm a delivery appears in the
+Google calendar. Mocked provider and simulator tests cannot establish live
+Google-consent acceptance.

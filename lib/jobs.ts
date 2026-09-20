@@ -146,6 +146,9 @@ export async function schedule() {
     }
     await c.query("DELETE FROM gmail_oauth_states WHERE expires_at<now()");
     await c.query("DELETE FROM sessions WHERE expires_at<now()");
+    await c.query(
+      "DELETE FROM native_calendar_attempts WHERE expires_at<now()",
+    );
     await c.query("DELETE FROM oauth_states WHERE expires_at<now()");
     await c.query("DELETE FROM google_signin_states WHERE expires_at<now()");
     await c.query("DELETE FROM rate_limits WHERE expires_at<now()");

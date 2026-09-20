@@ -17,15 +17,21 @@ const scope = "https://www.googleapis.com/auth/calendar.app.created";
 function redirectUri() {
   return `${origin()}/api/google/callback`;
 }
-export async function googleStart(ctx: Context) {
+export async function googleStart(ctx: Context, nativeAttemptId?: string) {
   requireReal(ctx);
   const clientId = configured("GOOGLE_CLIENT_ID");
   configured("GOOGLE_CLIENT_SECRET");
   const state = randomToken();
   const verifier = randomBytes(32).toString("base64url");
   await query(
-    "INSERT INTO oauth_states(state_hash,user_id,verifier,household_id,expires_at) VALUES($1,$2,$3,$4,now()+interval '10 minutes')",
-    [hash(state), ctx.userId, encrypt(verifier), ctx.householdId],
+    "INSERT INTO oauth_states(state_hash,user_id,verifier,household_id,expires_at,native_calendar_attempt_id) VALUES($1,$2,$3,$4,now()+interval '10 minutes',$5)",
+    [
+      hash(state),
+      ctx.userId,
+      encrypt(verifier),
+      ctx.householdId,
+      nativeAttemptId || null,
+    ],
   );
   const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   url.search = new URLSearchParams({
@@ -41,7 +47,11 @@ export async function googleStart(ctx: Context) {
   }).toString();
   return { url: url.toString() };
 }
-export async function googleCallback(ctx: Context, url: URL) {
+export async function googleCallback(
+  ctx: Context,
+  url: URL,
+  nativeAttemptId?: string,
+) {
   requireReal(ctx);
   const state = url.searchParams.get("state");
   if (!state) throw new AppError("Missing Google authorization state.");
@@ -72,6 +82,20 @@ export async function googleCallback(ctx: Context, url: URL) {
     await c.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
       `google:${ctx.householdId}`,
     ]);
+    if (nativeAttemptId) {
+      const valid = await c.query(
+        `SELECT n.id FROM native_calendar_attempts n JOIN native_sessions s ON s.token_hash=n.session_hash AND s.expires_at>now()
+        JOIN users u ON u.id=n.user_id AND u.household_id=n.household_id
+        JOIN household_members m ON m.user_id=n.user_id AND m.household_id=n.household_id
+        WHERE n.id=$1 AND n.session_hash=$2 AND n.expires_at>now() FOR SHARE OF n,s,u,m`,
+        [nativeAttemptId, ctx.nativeSessionHash],
+      );
+      if (!valid.rows.length)
+        throw new AppError(
+          "Your sign-in or household changed. Connect again.",
+          403,
+        );
+    }
     const [existing] = (
       await c.query(
         "SELECT calendar_id FROM google_connections WHERE household_id=$1",
@@ -288,7 +312,16 @@ export async function syncShipment(id: string) {
 }
 export async function disconnectGoogle(ctx: Context) {
   requireReal(ctx);
-  await query("DELETE FROM google_connections WHERE household_id=$1", [
-    ctx.householdId,
-  ]); /* Leave the user-owned calendar and its events in Google. Removing credentials stops future writes. */
+  await transaction(async (c) => {
+    await c.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+      `google:${ctx.householdId}`,
+    ]);
+    await c.query(
+      "DELETE FROM native_calendar_attempts WHERE household_id=$1",
+      [ctx.householdId],
+    );
+    await c.query("DELETE FROM google_connections WHERE household_id=$1", [
+      ctx.householdId,
+    ]);
+  }); // Keep the user-owned calendar and its existing events in Google.
 }

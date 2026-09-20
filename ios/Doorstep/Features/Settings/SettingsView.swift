@@ -10,6 +10,8 @@ struct SettingsView: View {
   @State private var sharingFeed = false
   @State private var exportURL: URL?
   @State private var exporting = false
+  @State private var calendar = GoogleCalendarConnection()
+  @State private var disconnectingCalendar = false
   var body: some View {
     List {
       ServiceBanner()
@@ -91,22 +93,68 @@ struct SettingsView: View {
               .secondary)
           }
         }
+        Section("Gmail setup") {
+          Link("Manage connections on website", destination: Configuration.websiteSettings)
+          Text("Gmail import is managed on the website. Safari may ask you to sign in separately.")
+            .font(.caption).foregroundStyle(.secondary)
+        }
         Section("Google Calendar") {
           LabeledContent("Status", value: settings.google.connected ? "Connected" : "Not connected")
           LabeledContent(
             "Last sync", value: Dates.timestamp(settings.google.lastSyncedAt, zone: store.timeZone))
           if settings.google.error != nil {
-            Text("Calendar sync needs attention. Check or reconnect on the website.")
+            Text("Calendar sync needs attention. Reconnect Google Calendar below.")
               .foregroundStyle(.secondary)
+          }
+          Text(
+            "Doorstep creates a Package Deliveries calendar for this household. It can only manage calendars it creates, not your unrelated calendars."
+          ).font(.footnote)
+          Button(
+            calendar.busy
+              ? "Connecting…"
+              : settings.google.connected ? "Reconnect Google Calendar" : "Connect Google Calendar"
+          ) {
+            let household = settings.householdId
+            let epoch = store.epoch
+            Task {
+              do {
+                let connected = try await calendar.connect(api: store.api, household: household)
+                guard store.epoch == epoch else { return }
+                await store.refresh()
+                if connected && store.dashboard?.settings.google.connected == true {
+                  store.message = "Google Calendar connected. Delivery sync is queued."
+                  store.scheduleFollowUp()
+                } else if !connected {
+                  store.message = "Calendar connection cancelled."
+                }
+              } catch {
+                guard store.epoch == epoch else { return }
+                store.errorMessage = store.friendly(error)
+              }
+            }
+          }.disabled(!store.canWrite || calendar.busy).accessibilityIdentifier(
+            "connectGoogleCalendar")
+          if settings.google.connected {
+            Button("Sync deliveries now") {
+              Task {
+                do {
+                  try await store.mutate("native/calendar/sync")
+                  store.message = "Calendar sync queued."
+                  store.scheduleFollowUp()
+                } catch {}
+              }
+            }.disabled(!store.canWrite || calendar.busy).accessibilityIdentifier(
+              "syncGoogleCalendar")
+            Button("Disconnect Google Calendar", role: .destructive) {
+              disconnectingCalendar = true
+            }
+            .disabled(!store.canWrite || calendar.busy)
           }
           Text(
             "To see deliveries in Apple Calendar, add your Google account in iPhone Settings → Apps → Calendar → Calendar Accounts. Enable Calendars, then select the Doorstep calendar in the Calendar app."
           ).font(.footnote)
           Text("Imports and calendar updates continue while Doorstep is closed.").font(.caption)
             .foregroundStyle(.secondary)
-          Link("Manage connections on website", destination: Configuration.websiteSettings)
-          Text("Safari may ask you to sign in separately.").font(.caption).foregroundStyle(
-            .secondary)
         }
         Section("Calendar subscription") {
           Text(
@@ -155,6 +203,25 @@ struct SettingsView: View {
       }
       Section { Button("Sign out", role: .destructive) { signingOut = true } }
     }.navigationTitle("Settings").refreshable { await store.refresh() }
+      .onChange(of: store.epoch) { _, _ in calendar.cancel() }
+      .confirmationDialog(
+        "Disconnect Google Calendar?", isPresented: $disconnectingCalendar,
+        titleVisibility: .visible
+      ) {
+        Button("Disconnect", role: .destructive) {
+          Task {
+            do {
+              try await store.mutate("native/calendar/disconnect")
+              store.message = "Google Calendar disconnected."
+            } catch {}
+          }
+        }
+        Button("Cancel", role: .cancel) {}
+      } message: {
+        Text(
+          "Stops future updates for this household. Your Google calendar and its existing events remain in Google."
+        )
+      }
       .sheet(isPresented: $addingMember) { MemberForm() }
       .sheet(isPresented: $editingHousehold) {
         if let settings = store.dashboard?.settings { HouseholdForm(settings: settings) }

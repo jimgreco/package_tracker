@@ -18,6 +18,7 @@
 		780FE4E5008284F97D3946B1 /* GoogleSignIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F3FD3D80936FC4B66C6015 /* GoogleSignIn.swift */; };
 		7C382FB22589F6CC39E205EE /* PackageDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 775BD3C350852A8599824FFA /* PackageDetailView.swift */; };
 		8ADFF810AEA55CCD2AEB8FBE /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22C55F63995B84C98BAF7CA2 /* AppStore.swift */; };
+		975F683EBA3255A6050504BC /* GoogleCalendarConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04739B6BD67E78EBFF15505D /* GoogleCalendarConnection.swift */; };
 		9A831A0F12C91DE9AAE4C909 /* InboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61B22C7631A1733967EDAC54 /* InboxView.swift */; };
 		9D147656A37BB81C7F1CD233 /* DoorstepTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43D464841728EBFAD42E0CBB /* DoorstepTests.swift */; };
 		9F68E8B5DE305C669CBCA071 /* Fixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 371864E4A1A08F9B6A26F2D9 /* Fixture.swift */; };
@@ -48,6 +49,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		04739B6BD67E78EBFF15505D /* GoogleCalendarConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleCalendarConnection.swift; sourceTree = "<group>"; };
 		17EE85E590E8C97AB86AC039 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		22C55F63995B84C98BAF7CA2 /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
 		3292879F0E6BDCD1BBE9C08C /* DoorstepUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = DoorstepUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -108,6 +110,7 @@
 		21D9F7A9E284CA26BB2825F2 /* Authentication */ = {
 			isa = PBXGroup;
 			children = (
+				04739B6BD67E78EBFF15505D /* GoogleCalendarConnection.swift */,
 				F2F3FD3D80936FC4B66C6015 /* GoogleSignIn.swift */,
 				32DDB3E56CEF47C3F07E1B26 /* Keychain.swift */,
 			);
@@ -359,6 +362,7 @@
 				4807DDFD09743BFD600D984D /* Dates.swift in Sources */,
 				2AB70934C9F393293425150C /* DoorstepApp.swift in Sources */,
 				9F68E8B5DE305C669CBCA071 /* Fixture.swift in Sources */,
+				975F683EBA3255A6050504BC /* GoogleCalendarConnection.swift in Sources */,
 				780FE4E5008284F97D3946B1 /* GoogleSignIn.swift in Sources */,
 				9A831A0F12C91DE9AAE4C909 /* InboxView.swift in Sources */,
 				D26AC2BDF949FF2495056C56 /* Keychain.swift in Sources */,

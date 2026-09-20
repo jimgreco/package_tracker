@@ -140,7 +140,7 @@ struct SignInView: View {
           Text(error).foregroundStyle(.red).accessibilityIdentifier("signInError")
         }
         Text(
-          "Use the same Google account as the website. Gmail and Google Calendar connections are managed there."
+          "Use the same Google account as the website. Gmail import is managed on the website. Connect Google Calendar in Settings."
         ).font(.footnote).foregroundStyle(.secondary)
         Link("Open Doorstep website", destination: Configuration.origin).frame(minHeight: 44)
       }.padding(28).padding(.top, 65).frame(maxWidth: 550, alignment: .leading).frame(

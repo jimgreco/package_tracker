@@ -121,6 +121,29 @@ final class ModelTests: XCTestCase {
         URL(string: "com.jimgreco.doorstep:/auth/callback?state=\(state)&error=signin_failed")!,
         state: state))
   }
+  func testCalendarCallbackValidation() throws {
+    let state = "calendar-state"
+    XCTAssertTrue(
+      try GoogleCalendarConnection.validate(
+        URL(
+          string: "com.jimgreco.doorstep:/calendar/callback?state=calendar-state&result=connected")!,
+        state: state))
+    XCTAssertFalse(
+      try GoogleCalendarConnection.validate(
+        URL(
+          string: "com.jimgreco.doorstep:/calendar/callback?state=calendar-state&result=cancelled")!,
+        state: state))
+    for url in [
+      "evil:/calendar/callback?state=calendar-state&result=connected",
+      "com.jimgreco.doorstep:/auth/callback?state=calendar-state&result=connected",
+      "com.jimgreco.doorstep:/calendar/callback?state=wrong&result=connected",
+      "com.jimgreco.doorstep:/calendar/callback?state=calendar-state&state=calendar-state&result=connected",
+      "com.jimgreco.doorstep:/calendar/callback?state=calendar-state&result=connected&result=error",
+      "com.jimgreco.doorstep:/calendar/callback?state=calendar-state&result=error",
+    ] {
+      XCTAssertThrowsError(try GoogleCalendarConnection.validate(URL(string: url)!, state: state))
+    }
+  }
   func testSessionExpiryAndOfflineSignout() async throws {
     var expired = Fixture.session
     expired.expiresAt = "2020-01-01T00:00:00Z"

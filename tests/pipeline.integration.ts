@@ -66,6 +66,7 @@ before(async () => {
     "008_retailer_reference.sql",
     "009_native_sessions.sql",
     "010_delivery_features.sql",
+    "011_native_calendar.sql",
   ])
     await query(await readFile("db/" + file, "utf8"));
   const [h] = await query(

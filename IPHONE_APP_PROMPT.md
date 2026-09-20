@@ -14,10 +14,11 @@ Preserve Google-only accounts, household membership, original-email timeline
 ordering, dismiss/restore behavior, package identity rules, and Google Calendar
 sync. Tracking, Gmail ingestion, and extraction stay on the server. Implement
 secure native Google sign-in; do not assume the existing browser cookies work in
-a native API client. Google sign-in is the only native Google authorization flow:
-reuse existing server Gmail/Calendar connections and show their status. All
-connection setup and management stay on the website; do not build native Gmail
-or Calendar consent flows.
+a native API client. Google Calendar connection and management are supported in
+Settings through a browser-bound server OAuth flow using the existing Calendar
+scope and callback. Reuse the server connections and keep tokens off the device.
+Gmail connection setup and management remain on the website; do not add native
+Gmail consent.
 
 Use reasonable defaults from the spec. Inspect relevant existing iOS projects in
 ~/code for build/signing conventions. Preserve unrelated changes and keep secrets

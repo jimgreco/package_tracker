@@ -142,6 +142,29 @@ import XCTest
     XCTAssertTrue(app.staticTexts["Local bookstore"].waitForExistence(timeout: 5))
     screenshot("created-package")
   }
+  func testGoogleCalendarControls() {
+    launch()
+    app.tabBars.buttons["Settings"].tap()
+    let sync = app.buttons["syncGoogleCalendar"]
+    reveal(sync)
+    XCTAssertTrue(sync.isHittable)
+    XCTAssertTrue(app.buttons["Reconnect Google Calendar"].exists)
+    screenshot("google-calendar-connected")
+    sync.tap()
+    let disconnect = app.buttons["Disconnect Google Calendar"]
+    reveal(disconnect)
+    disconnect.tap()
+    XCTAssertTrue(app.buttons["Disconnect"].waitForExistence(timeout: 3))
+    screenshot("google-calendar-disconnect")
+    app.buttons["Disconnect"].tap()
+    let connect = app.buttons["connectGoogleCalendar"]
+    expectation(for: NSPredicate(format: "label == %@", "Connect Google Calendar"), evaluatedWith: connect)
+    waitForExpectations(timeout: 5)
+    reveal(connect)
+    XCTAssertEqual(connect.label, "Connect Google Calendar")
+    XCTAssertFalse(app.buttons["syncGoogleCalendar"].exists)
+    screenshot("google-calendar-disconnected")
+  }
   func testInboxAndSettings() {
     launch()
     app.tabBars.buttons["Inbox"].tap()

@@ -145,6 +145,12 @@
         if method == "POST", let body { return body }
         return try JSONEncoder().encode(NotificationPreferences())
       }
+      if path == "native/calendar/disconnect" {
+        value.settings.google.connected = false
+        value.settings.google.calendarId = nil
+        return Data(#"{"ok":true}"#.utf8)
+      }
+      if path == "native/calendar/sync" { return Data(#"{"queued":true}"#.utf8) }
       if path == "dashboard" { return try JSONEncoder().encode(value) }
       let parts = path.split(separator: "/").map(String.init)
       if parts.first == "shipments" {

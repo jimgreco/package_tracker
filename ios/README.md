@@ -3,8 +3,10 @@
 SwiftUI client for the existing Doorstep server. iPhone, iOS 18 or later, Swift 6.
 The three tabs provide packages, original emails, and household settings. Tracking,
 extraction, Gmail imports and Google Calendar projections remain on the server.
-Google account login is the only native Google authorization. Connection management
-opens the website in the system browser and may require a separate website login.
+Google account login and optional Calendar consent use system authentication browsers.
+Gmail management opens the website and may require a separate website login.
+Google Calendar has native Connect/Reconnect, Sync now, and Disconnect controls.
+Its consent browser returns directly to the app; Gmail setup stays on the website.
 
 ## Project and configuration
 

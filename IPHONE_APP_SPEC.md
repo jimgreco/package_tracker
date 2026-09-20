@@ -69,8 +69,8 @@ Read current source before implementing; preserve subsequent changes.
 The existing API uses an HttpOnly `doorstep_session` cookie. Non-GET browser
 requests require the configured Origin. Google login has a browser-oriented
 callback. Native bearer sessions and native sign-in completion routes described
-below **do not exist yet**. Gmail and Calendar connection flows remain on the
-website and are outside the native implementation scope.
+below are implemented. Google Calendar supports native connection controls with
+server-owned OAuth and tokens. Gmail connection setup remains website-only.
 
 The existing dashboard includes dismissed shipments and excludes archived ones.
 Its `settings` object carries connection status, household membership, and the
@@ -298,18 +298,20 @@ and interrupted/network-failed completion without exposing secrets in errors.
 
 ### Existing Gmail and Calendar connections
 
-The only Google authorization flow to implement in iOS is account sign-in using
-`openid email profile`. Do not add native Gmail/Calendar connection endpoints,
-provider-consent callbacks, history-range setup, or grant-management controls.
+Native account sign-in uses only `openid email profile`. Google Calendar now has
+Connect/Reconnect, Sync now, and Disconnect controls in Settings. It reuses the
+web OAuth client, `/api/google/callback`, and `calendar.app.created` scope through
+an authenticated native launch, a one-use browser handoff, and a browser-bound
+callback. The app receives only a completion status. Google tokens stay encrypted
+on the server. Validate the native session and household again before persisting
+a connection; logout, removal, household switching, and disconnect invalidate
+pending consent. Disconnect leaves Google's calendar and existing events intact.
 
-Reuse the existing server connections. Gmail continues importing and the worker
-continues syncing shipment changes to Google Calendar regardless of whether the
-iPhone app is open. Show their status from the dashboard; direct setup/reconnect
-work to the website. A user can use the iPhone app without either connection.
-
-Leave the website's existing Google callbacks, scopes, account restrictions,
-`GMAIL_HOUSEHOLD_ID`, and connection lifecycle behavior intact. Native sign-in and
-sign-out must not create, replace, or disconnect these grants.
+Gmail setup, reconnect, history-range selection, and grant management remain on
+the website. Preserve `GMAIL_HOUSEHOLD_ID` and Gmail's existing account restrictions.
+Native sign-in and sign-out must not create, replace, or disconnect provider grants.
+Background imports and calendar updates continue when the app is closed. Neither
+connection is required to use the iPhone app.
 
 ## 6. Existing API surface
 
@@ -422,8 +424,8 @@ ios/
    destination-zone, and DST cases display correctly.
 7. Native Google sign-in requests only `openid email profile`; cancellation leaves
    existing connections intact. Existing Gmail imports and Google Calendar updates
-   continue on the server. The app shows connection status without requiring or
-   initiating Gmail/Calendar consent.
+   continue on the server. Calendar consent is optional and available from native
+   Settings; Gmail consent remains website-only.
 8. Household switching, member removal, session expiration, logout, offline launch,
    malformed responses, missing images, and server errors have usable states and
    do not leak one household's data into another view.
@@ -485,7 +487,7 @@ development and direct device testing.
    household → dashboard slice, with backend authentication tests.
 4. Build package list/detail/actions and manual editing, including creation
    idempotency and server reconciliation.
-5. Build inbox and settings, including read-only Gmail/Calendar connection status,
+5. Build inbox and settings, including Gmail status and Calendar connection controls,
    membership management, household switching, export, and a link to web settings.
 6. Add offline read-only behavior, accessibility, error handling, and regression
    coverage; inspect the actual simulator screens.
@@ -494,7 +496,8 @@ development and direct device testing.
 8. Finish with changed files, commands/results, release evidence, and any exact
    user-only action remaining. A mockup or fixture-only dashboard is not completion.
 
-Native Gmail/Calendar connection setup is explicitly outside this release.
+Native Gmail connection setup remains outside this release. Google Calendar
+connection setup is now supported through the existing server OAuth integration.
 Defer push notifications, widgets, Live Activities, Siri/App Intents, share
 extensions, Apple Watch, iPad-specific layouts, barcode scanning, on-device email
 parsing, and offline mutation queues. They can follow once the complete native

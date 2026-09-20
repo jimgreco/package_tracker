@@ -1,4 +1,10 @@
 import {
+  nativeCalendarStart,
+  nativeCalendarAuthorize,
+  nativeCalendarCallback,
+  calendarBrowserCookie,
+} from "@/lib/native-calendar";
+import {
   notificationSettings,
   saveNotificationSettings,
   registerDevice,
@@ -184,6 +190,24 @@ async function handle(
       response.headers.set("Referrer-Policy", "no-referrer");
       return response;
     }
+    if (route === "native/calendar/authorize" && method === "GET") {
+      const result = await nativeCalendarAuthorize(req);
+      const response = NextResponse.redirect(result.url);
+      response.headers.set("Set-Cookie", result.cookie);
+      response.headers.set("Cache-Control", "no-store");
+      response.headers.set("Referrer-Policy", "no-referrer");
+      return response;
+    }
+    if (route === "google/callback" && method === "GET") {
+      const destination = await nativeCalendarCallback(req);
+      if (destination) {
+        const response = NextResponse.redirect(destination);
+        response.headers.set("Set-Cookie", calendarBrowserCookie());
+        response.headers.set("Cache-Control", "no-store");
+        response.headers.set("Referrer-Policy", "no-referrer");
+        return response;
+      }
+    }
     if (req.headers.has("authorization")) {
       requestContext = await context(req, false);
       if (!requestContext.nativeSessionHash)
@@ -292,6 +316,36 @@ async function handle(
         .parse(path[1]);
       await gmailAction(ctx, action);
       return json({ ok: true });
+    }
+    if (
+      path[0] === "native" &&
+      path[1] === "calendar" &&
+      path.length === 3 &&
+      method === "POST"
+    ) {
+      if (!ctx.nativeSessionHash)
+        throw new AppError("Use the Doorstep iPhone app.", 403);
+      if (path[2] === "start")
+        return json(await nativeCalendarStart(ctx, await jsonBody(req, 4096)));
+      if (path[2] === "disconnect") {
+        await disconnectGoogle(ctx);
+        return json({ ok: true });
+      }
+      if (path[2] === "sync") {
+        requireReal(ctx);
+        await rateLimit(`calendar-sync:${ctx.householdId}`, 4, 3600);
+        const [connection] = await query(
+          "SELECT household_id FROM google_connections WHERE household_id=$1",
+          [ctx.householdId],
+        );
+        if (!connection) throw new AppError("Connect Google Calendar first.");
+        await enqueue(
+          "google_all",
+          { householdId: ctx.householdId },
+          `native-calendar-sync:${ctx.householdId}:${randomToken()}`,
+        );
+        return json({ queued: true });
+      }
     }
     if (route === "notifications/preferences" && method === "GET")
       return json(await notificationSettings(ctx));
