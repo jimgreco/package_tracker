@@ -831,6 +831,41 @@ test("native bearer isolation, Origin separation, revocation and atomic manual c
     "INSERT INTO shipment_emails(shipment_id,email_id) VALUES($1,$2)",
     [ids[0].id, source.id],
   );
+  const [ignored] = await query(
+    "INSERT INTO source_emails(household_id,message_key,subject,sender,body_text,status) VALUES($1,$2,'Digital receipt','fixture@example.test','Not a physical delivery','ignored') RETURNING id",
+    [session.householdId, randomToken()],
+  );
+  const reviewIds = [];
+  for (const status of ["needs_review", "failed", "queued"]) {
+    const [email] = await query(
+      "INSERT INTO source_emails(household_id,message_key,subject,sender,body_text,status) VALUES($1,$2,$3,'fixture@example.test','Delivery email',$3) RETURNING id",
+      [session.householdId, randomToken(), status],
+    );
+    reviewIds.push(email.id);
+  }
+  const nativeInbox = (
+    await (await nativeCall("dashboard", undefined, token)).json()
+  ).emails;
+  const webInbox = (
+    await (
+      await call("dashboard", undefined, await sessionCookie(session.userId))
+    ).json()
+  ).emails;
+  assert.deepEqual(
+    nativeInbox,
+    webInbox,
+    "Native and web inboxes must use the same filter",
+  );
+  assert.ok(!nativeInbox.some((e: { id: string }) => e.id === ignored.id));
+  for (const id of [source.id, ...reviewIds]) {
+    assert.ok(nativeInbox.some((e: { id: string }) => e.id === id));
+  }
+  assert.equal(
+    (
+      await query("SELECT status FROM source_emails WHERE id=$1", [ignored.id])
+    )[0].status,
+    "ignored",
+  );
   const linkedEmail = await (
     await nativeCall(`emails/${source.id}`, undefined, token)
   ).json();

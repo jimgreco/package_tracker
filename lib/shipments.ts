@@ -152,13 +152,10 @@ export async function settings(ctx: Context): Promise<Settings> {
     members: members as Settings["members"],
   };
 }
-export async function emails(
-  householdId: string,
-  includeIgnored = false,
-): Promise<Email[]> {
+export async function emails(householdId: string): Promise<Email[]> {
   const rows = await query(
-    "SELECT id,subject,sender,sent_at,received_at,status,error FROM source_emails WHERE household_id=$1 AND ($2 OR status<>'ignored') ORDER BY coalesce(sent_at,received_at) DESC,id DESC LIMIT 100",
-    [householdId, includeIgnored],
+    "SELECT id,subject,sender,sent_at,received_at,status,error FROM source_emails WHERE household_id=$1 AND status<>'ignored' ORDER BY coalesce(sent_at,received_at) DESC,id DESC LIMIT 100",
+    [householdId],
   );
   return rows.map((r) => ({
     id: r.id,
@@ -173,7 +170,7 @@ export async function emails(
 export async function dashboard(ctx: Context): Promise<DashboardData> {
   const [s, e, settingsData] = await Promise.all([
     shipments(ctx.householdId, false, true),
-    emails(ctx.householdId, !!ctx.nativeSessionHash),
+    emails(ctx.householdId),
     settings(ctx),
   ]);
   return { shipments: s, emails: e, settings: settingsData };
