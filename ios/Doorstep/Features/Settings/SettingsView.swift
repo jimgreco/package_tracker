@@ -16,6 +16,9 @@ struct SettingsView: View {
     List {
       ServiceBanner()
       if let settings = store.dashboard?.settings {
+        Section("Getting started") {
+          Button("Show app walkthrough") { store.showWalkthrough = true }
+        }
         Section("Account") {
           Text(settings.userName).font(.headline)
           Text(settings.account.email).textSelection(.enabled)

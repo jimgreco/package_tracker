@@ -11,6 +11,7 @@ import Observation
   var dashboard: Dashboard?
   var snapshot: PackageSnapshot?
   var details: [String: PackageDetail] = [:]
+  var showWalkthrough = false
   var loading = false
   var writing = false
   var offline = false

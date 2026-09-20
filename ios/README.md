@@ -160,3 +160,10 @@ and follows [Google's external-user-agent guidance](https://developers.google.co
 Use the dedicated Mac runner and API-based release workflow in
 [TESTFLIGHT.md](TESTFLIGHT.md). See [VERIFICATION.md](VERIFICATION.md) for recorded
 validation and the distinction between internal availability and device acceptance.
+
+After sign-in, the iPhone app offers a four-screen walkthrough covering Packages,
+Inbox and Settings, notification permission, and Google Calendar consent. Steps
+can be skipped; progress is saved on this iPhone per account and household.
+Reopen it from Settings → Getting started → Show app walkthrough. Notification
+permission and Calendar consent use the same system flows as Settings; skipping
+never enables either service. The website has no new onboarding flow.

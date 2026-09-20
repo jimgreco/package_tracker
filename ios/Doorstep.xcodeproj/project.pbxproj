@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		018CFAF3A3FA2189D2895B85 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FC5343C4F5E8B4E9293C89BD /* Assets.xcassets */; };
 		0D6DC58BA3BCFCA3D8014F64 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B79EDFDE936CEDA767B2E83C /* APIClient.swift */; };
+		0E09FCB29C3A421B9A407929 /* WalkthroughView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2395F54C4C0EE832178D3F4 /* WalkthroughView.swift */; };
 		1B61545F4942B3487A18F73C /* PackageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A30B630A07992B7744996B3 /* PackageCache.swift */; };
 		2AB70934C9F393293425150C /* DoorstepApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C883EA9ACABA9A7F19960C5B /* DoorstepApp.swift */; };
 		43CBB106E892171C41C49D81 /* PrivacyShield.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92A026689640972B8846EEB4 /* PrivacyShield.swift */; };
@@ -69,6 +70,7 @@
 		AD8B10EDEE165CF1E5842142 /* PushNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushNotifications.swift; sourceTree = "<group>"; };
 		B79EDFDE936CEDA767B2E83C /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		BAE040C3970A86B8B6A0F6CA /* Doorstep.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Doorstep.entitlements; sourceTree = "<group>"; };
+		C2395F54C4C0EE832178D3F4 /* WalkthroughView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkthroughView.swift; sourceTree = "<group>"; };
 		C46D47423641BC3DDF5C6677 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		C883EA9ACABA9A7F19960C5B /* DoorstepApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoorstepApp.swift; sourceTree = "<group>"; };
 		F0357EC0651E5CAC5FF9E554 /* Dates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Dates.swift; sourceTree = "<group>"; };
@@ -189,6 +191,7 @@
 			isa = PBXGroup;
 			children = (
 				95D453FE00DDDA00BB7F4352 /* SettingsView.swift */,
+				C2395F54C4C0EE832178D3F4 /* WalkthroughView.swift */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
@@ -374,6 +377,7 @@
 				43CBB106E892171C41C49D81 /* PrivacyShield.swift in Sources */,
 				B154E0DB032E5EA22119489A /* PushNotifications.swift in Sources */,
 				C851CFA315FA3DE6E8BFFBEC /* SettingsView.swift in Sources */,
+				0E09FCB29C3A421B9A407929 /* WalkthroughView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -321,3 +321,20 @@ actor BlockingWriteAPI: DoorstepAPI {
     continuation = nil
   }
 }
+
+final class WalkthroughProgressTests: XCTestCase {
+  func testProgressIsScopedAndClamped() {
+    let suite = "walkthrough-test-" + UUID().uuidString
+    let defaults = UserDefaults(suiteName: suite)!
+    defer { defaults.removePersistentDomain(forName: suite) }
+    XCTAssertEqual(WalkthroughProgress.step(user: "a", household: "one", defaults: defaults), 0)
+    defaults.set(2, forKey: WalkthroughProgress.key(user: "a", household: "one"))
+    XCTAssertEqual(WalkthroughProgress.step(user: "a", household: "one", defaults: defaults), 2)
+    XCTAssertEqual(WalkthroughProgress.step(user: "b", household: "one", defaults: defaults), 0)
+    XCTAssertEqual(WalkthroughProgress.step(user: "a", household: "two", defaults: defaults), 0)
+    defaults.set(4, forKey: WalkthroughProgress.key(user: "a", household: "one"))
+    XCTAssertEqual(WalkthroughProgress.step(user: "a", household: "one", defaults: defaults), 4)
+    defaults.set(-1, forKey: WalkthroughProgress.key(user: "a", household: "one"))
+    XCTAssertEqual(WalkthroughProgress.step(user: "a", household: "one", defaults: defaults), 0)
+  }
+}

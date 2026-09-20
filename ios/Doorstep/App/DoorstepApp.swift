@@ -45,9 +45,11 @@ import SwiftUI
   }
 }
 struct RootView: View {
+  @State private var checkedWalkthrough: String?
   @State private var notificationPackage: PushDestination?
   @Environment(AppStore.self) private var store
   var body: some View {
+    @Bindable var store = store
     Group {
       if store.session == nil {
         SignInView()
@@ -78,6 +80,29 @@ struct RootView: View {
       if store.householdId == destination.householdId { notificationPackage = destination }
       PushNotifications.shared.destination = nil
     }
+    .task(id: "\(store.session?.userId ?? ""):\(store.householdId ?? ""):\(store.dashboard != nil)")
+    {
+      guard let session = store.session, store.dashboard != nil else { return }
+      let key = WalkthroughProgress.key(user: session.userId, household: session.householdId)
+      guard checkedWalkthrough != key else { return }
+      checkedWalkthrough = key
+      #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--fixture") {
+          guard ProcessInfo.processInfo.arguments.contains("--walkthrough") else { return }
+          UserDefaults.standard.removeObject(forKey: key)
+        }
+      #endif
+      if WalkthroughProgress.step(user: session.userId, household: session.householdId) < 4
+        && notificationPackage == nil && PushNotifications.shared.destination == nil
+      {
+        store.showWalkthrough = true
+      }
+    }
+    .fullScreenCover(isPresented: $store.showWalkthrough) {
+      if let session = store.session {
+        WalkthroughView(user: session.userId, household: session.householdId).environment(store)
+      }
+    }
     .sheet(item: $notificationPackage) { destination in
       NavigationStack {
         PackageDetailView(id: destination.id).toolbar {
@@ -87,7 +112,11 @@ struct RootView: View {
         }
       }.environment(store)
     }
-    .onChange(of: store.session?.userId) { _, _ in notificationPackage = nil }
+    .onChange(of: store.session?.userId) { _, _ in
+      notificationPackage = nil
+      store.showWalkthrough = false
+      checkedWalkthrough = nil
+    }
     .onChange(of: store.householdId) { _, _ in notificationPackage = nil }
   }
 }

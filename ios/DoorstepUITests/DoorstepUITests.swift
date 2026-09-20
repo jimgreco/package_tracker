@@ -22,6 +22,49 @@ import XCTest
       app.swipeUp()
     }
   }
+  func testWalkthrough() {
+    launch(["--walkthrough"])
+    XCTAssertTrue(app.staticTexts["Welcome to Doorstep"].waitForExistence(timeout: 8))
+    screenshot("walkthrough-overview")
+    let next = app.buttons["walkthroughContinue"]
+    reveal(next)
+    next.tap()
+    XCTAssertTrue(app.staticTexts["A heads-up when it matters"].waitForExistence(timeout: 3))
+    XCTAssertTrue(app.buttons["walkthroughEnableNotifications"].exists)
+    screenshot("walkthrough-notifications")
+    reveal(next)
+    next.tap()
+    XCTAssertTrue(app.staticTexts["Deliveries, on your calendar"].waitForExistence(timeout: 3))
+    XCTAssertTrue(app.buttons["walkthroughConnectCalendar"].exists)
+    screenshot("walkthrough-calendar")
+    reveal(next)
+    next.tap()
+    XCTAssertTrue(app.staticTexts["Make yourself at home"].waitForExistence(timeout: 3))
+    reveal(next)
+    next.tap()
+    XCTAssertTrue(app.buttons["packageFilter"].waitForExistence(timeout: 5))
+    app.tabBars.buttons["Settings"].tap()
+    app.buttons["Show app walkthrough"].tap()
+    XCTAssertTrue(app.staticTexts["Welcome to Doorstep"].waitForExistence(timeout: 3))
+    app.buttons["Set up later"].tap()
+    XCTAssertTrue(app.buttons["Show app walkthrough"].waitForExistence(timeout: 3))
+  }
+  func testWalkthroughLargeText() {
+    launch([
+      "--walkthrough", "-UIPreferredContentSizeCategoryName",
+      "UICTContentSizeCategoryAccessibilityXXXL",
+    ])
+    XCTAssertTrue(app.staticTexts["Welcome to Doorstep"].waitForExistence(timeout: 8))
+    let next = app.buttons["walkthroughContinue"]
+    reveal(next)
+    XCTAssertTrue(next.isHittable)
+    screenshot("walkthrough-large-text")
+    next.tap()
+    reveal(app.buttons["walkthroughEnableNotifications"])
+    XCTAssertTrue(app.buttons["walkthroughEnableNotifications"].isHittable)
+    app.buttons["Set up later"].tap()
+    XCTAssertTrue(app.buttons["packageFilter"].waitForExistence(timeout: 5))
+  }
   func testCollectionAndUndo() {
     launch()
     XCTAssertTrue(app.buttons["packageFilter"].waitForExistence(timeout: 5))
@@ -158,7 +201,8 @@ import XCTest
     screenshot("google-calendar-disconnect")
     app.buttons["Disconnect"].tap()
     let connect = app.buttons["connectGoogleCalendar"]
-    expectation(for: NSPredicate(format: "label == %@", "Connect Google Calendar"), evaluatedWith: connect)
+    expectation(
+      for: NSPredicate(format: "label == %@", "Connect Google Calendar"), evaluatedWith: connect)
     waitForExpectations(timeout: 5)
     reveal(connect)
     XCTAssertEqual(connect.label, "Connect Google Calendar")
