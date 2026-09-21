@@ -29,7 +29,7 @@ final class NetworkingTests: XCTestCase {
   func testCredentialsAreScopedAndHouseholdIdentityRequired() async throws {
     let client = await client()
     StubProtocol.handler = { request in
-      XCTAssertEqual(request.url?.host, "packages.jim-greco.com")
+      XCTAssertEqual(request.url?.host, "porchpong.com")
       XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer fixture")
       XCTAssertNil(request.value(forHTTPHeaderField: "Cookie"))
       return (

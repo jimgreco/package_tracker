@@ -12,7 +12,7 @@ A Next.js / TypeScript household package tracker with PostgreSQL and a separate 
 
 ## Deployment
 
-- Public repository: `jimgreco/package_tracker`. Production: `https://packages.jim-greco.com`.
+- Public repository: `jimgreco/package_tracker`. Production: `https://porchpong.com`.
 - `.github/workflows/deploy.yml` verifies and publishes ARM64 images, then runs `scripts/deploy-ec2.sh`. Canonical services live in `/Users/jgreco/code/deploy/docker-compose.yml` under the `doorstep` profile.
 - Credentials stay in ignored server `~/deploy/doorstep.env` and shared `.env`. Never copy them into Git or build artifacts.
 - Verify the exact pushed SHA in GitHub Actions, public `/api/health` (`build`, `database`), homepage, and both container health checks. Deployment does not establish Google/email/carrier provider acceptance.

@@ -28,7 +28,7 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: PorchPong/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        DOORSTEP_API_ORIGIN: https://packages.jim-greco.com
+        DOORSTEP_API_ORIGIN: https://porchpong.com
       configs:
         Debug:
           APNS_ENVIRONMENT: development

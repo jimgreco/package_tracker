@@ -170,15 +170,15 @@ The app requires a continuously running web process, worker, PostgreSQL, HTTPS t
 
 ### Consolidated EC2 deployment
 
-Production URL: `https://packages.jim-greco.com`. The public application repository is `jimgreco/package_tracker`; infrastructure is managed by `jimgreco/consolidated-deploy`.
+Production URL: `https://porchpong.com`. The public application repository is `jimgreco/package_tracker`; infrastructure is managed by `jimgreco/consolidated-deploy`.
 
 Pushes to `main` run `.github/workflows/deploy.yml`: TypeScript, unit and isolated PostgreSQL integration tests, production build, ARM64 image publication, migrations, and scoped deployment through the canonical consolidated Compose file. Both containers must become healthy and the public `/api/health` must return the pushed commit before the workflow succeeds. Pull requests run verification only.
 
 Repository deployment secrets: `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`, and `EC2_KNOWN_HOSTS` (the trusted server host-key entry). Application credentials stay in `~/deploy/doorstep.env` on EC2; they are never copied into the image or public repository. Use `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `OPENAI_API_KEY`, and the receiving/tracking variables from `.env.example`. Google redirects for production are:
 
-- `https://packages.jim-greco.com/api/auth/google/callback`
-- `https://packages.jim-greco.com/api/google/callback`
-- `https://packages.jim-greco.com/api/gmail/callback`
+- `https://porchpong.com/api/auth/google/callback`
+- `https://porchpong.com/api/google/callback`
+- `https://porchpong.com/api/gmail/callback`
 
 The `doorstep` Compose profile keeps application release pins separate from unrelated infrastructure pushes. `scripts/deploy-ec2.sh` generates database/encryption secrets once, creates the dedicated `doorstep` database owned by `doorstep_app`, and persists a healthy `DOORSTEP_IMAGE` pin. It never restarts the shared database or other applications. Nginx Proxy Manager routes the hostname to `doorstep:4317`.
 

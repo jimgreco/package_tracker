@@ -18,7 +18,7 @@ Its consent browser returns directly to the app; Gmail setup stays on the websit
   wildcard team provisioning profile support direct device builds for this ID.
   Distribution uses the explicit app identifier and App Store Connect record
   described in [TESTFLIGHT.md](TESTFLIGHT.md).
-- Release origin is fixed to `https://packages.jim-greco.com` in code. Release has
+- Release origin is fixed to `https://porchpong.com` in code. Release has
   no ATS exceptions, fixture bypass, or configurable server switch.
 - Debug reads the `DOORSTEP_API_ORIGIN` build setting (production by default).
   For the simulator, override it with `http://127.0.0.1:4317`; Debug alone allows

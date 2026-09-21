@@ -35,7 +35,7 @@ elif sys.argv[1] == 'archive':
     assert info['CFBundleVersion'] == os.environ['IOS_BUILD_NUMBER']
     assert BUNDLE in [s for t in info['CFBundleURLTypes'] for s in t['CFBundleURLSchemes']]
     assert info['ITSAppUsesNonExemptEncryption'] is False
-    assert info['PorchPongAPIOrigin'] == 'https://packages.jim-greco.com'
+    assert info['PorchPongAPIOrigin'] == 'https://porchpong.com'
     assert not info.get('NSAppTransportSecurity'), 'Release must not contain transport exceptions.'
     assert info['MinimumOSVersion'] == '18.0'
     assert info['UIDeviceFamily'] == [1], 'PorchPong is an iPhone app; target settings must override XcodeGen defaults.'

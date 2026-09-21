@@ -136,7 +136,7 @@ export default function PrivacyPage() {
       </p>
       <p>
         For privacy questions or deletion requests, email{" "}
-        <a href="mailto:doorstep@jim-greco.com">doorstep@jim-greco.com</a>.
+        <a href="mailto:jgreco@gmail.com">jgreco@gmail.com</a>.
         Changes to this policy will be posted here with an updated date.
       </p>
     </main>

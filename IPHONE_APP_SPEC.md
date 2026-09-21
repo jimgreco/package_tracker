@@ -37,7 +37,7 @@ where necessary; keep one service and one source of truth.
   use availability checks for newer APIs.
 - App name: **PorchPong**. Proposed bundle identifier: `com.jimgreco.doorstep`;
   confirm availability in the existing Apple signing setup before registering it.
-- Production API origin: `https://packages.jim-greco.com`.
+- Production API origin: `https://porchpong.com`.
 - Local web API: `http://127.0.0.1:4317` for simulator development. A physical
   iPhone needs a reachable development host; its loopback address is not the Mac.
 - First delivery: a functioning native client, required backend support, tests,

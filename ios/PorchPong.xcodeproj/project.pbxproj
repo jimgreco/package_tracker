@@ -500,7 +500,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = PorchPong/PorchPong.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DOORSTEP_API_ORIGIN = "https://packages.jim-greco.com";
+				DOORSTEP_API_ORIGIN = "https://porchpong.com";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = PorchPong/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -617,7 +617,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = PorchPong/PorchPong.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DOORSTEP_API_ORIGIN = "https://packages.jim-greco.com";
+				DOORSTEP_API_ORIGIN = "https://porchpong.com";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "PorchPong/Info-Debug.plist";
 				LD_RUNPATH_SEARCH_PATHS = (

@@ -101,10 +101,10 @@ enum Configuration {
     #if DEBUG
       let configured =
         Bundle.main.object(forInfoDictionaryKey: "PorchPongAPIOrigin") as? String
-        ?? "https://packages.jim-greco.com"
+        ?? "https://porchpong.com"
       return URL(string: configured)!
     #else
-      return URL(string: "https://packages.jim-greco.com")!
+      return URL(string: "https://porchpong.com")!
     #endif
   }()
   static var websiteSettings: URL {
