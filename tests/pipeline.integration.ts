@@ -579,17 +579,41 @@ test("Postmark endpoint verifies its secret, routes a private alias and deduplic
     });
   }
   assert.equal((await POST(request(payload, false), params)).status, 401);
-  assert.equal(
-    (
-      await POST(
-        request({
-          ...payload,
-          OriginalRecipient: "packages+unknown@inbound.example.invalid",
-        }),
-        params,
-      )
-    ).status,
-    403,
+  const before = await query(
+    "SELECT (SELECT count(*)::int FROM source_emails) emails, (SELECT count(*)::int FROM jobs) jobs",
+  );
+  for (const recipient of [
+    "packages+unknown@inbound.example.invalid",
+    `packages+${"0".repeat(64)}@inbound.example.invalid`,
+    `packages+${ctx.forwardingToken}@wrong.example.invalid`,
+    "yourhash+SampleHash@inbound.postmarkapp.com",
+  ]) {
+    const response = await POST(
+      request({ ...payload, OriginalRecipient: recipient }),
+      params,
+    );
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      received: true,
+      ignored: true,
+      reason: "unknown_recipient",
+    });
+  }
+  // The envelope recipient wins over a valid-looking address in message headers.
+  const spoofedHeaders = await POST(
+    request({
+      ...payload,
+      OriginalRecipient: "unknown@inbound.example.invalid",
+      ToFull: [{ Email: payload.OriginalRecipient }],
+    }),
+    params,
+  );
+  assert.equal((await spoofedHeaders.json()).ignored, true);
+  assert.deepEqual(
+    await query(
+      "SELECT (SELECT count(*)::int FROM source_emails) emails, (SELECT count(*)::int FROM jobs) jobs",
+    ),
+    before,
   );
   const first = await POST(request(payload), params);
   const second = await POST(request(payload), params);

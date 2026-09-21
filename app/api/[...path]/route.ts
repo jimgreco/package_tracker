@@ -132,7 +132,15 @@ async function handle(
           if (household) break;
         }
       }
-      if (!household) throw new AppError("Unknown forwarding address.", 403);
+      // Authenticated delivery does not imply a valid household recipient.
+      // Acknowledge permanent routing misses (including Postmark's check) without
+      // importing anything or treating provider retries as new package mail.
+      if (!household)
+        return json({
+          received: true,
+          ignored: true,
+          reason: "unknown_recipient",
+        });
       await rateLimit(`inbound:${household.id}`, 200, 86400);
       return json(
         await receiveEmail(household.id, {
