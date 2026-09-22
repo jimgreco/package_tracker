@@ -1845,3 +1845,172 @@ test("device registration requires native auth and reassignment discards old log
     ["old-device-session", "new-device-session"],
   ]);
 });
+
+test("formatting-tolerant order matching upgrades confirmations and preserves split shipments under concurrency", async () => {
+  const merchant = "Formatting regression shop";
+  async function ingest(key: string, number: string, tracking: string | null) {
+    const email = await incoming(
+      key,
+      `Order ${number} ${tracking || ""} Trail shoes`,
+    );
+    const parsed = extraction(tracking, tracking ? "in_transit" : "ordered");
+    parsed.orders[0].merchant = merchant;
+    parsed.orders[0].orderNumber = number;
+    await applyExtraction(email.id, parsed);
+    return email.id;
+  }
+  const confirmation = await ingest("format:confirm", "AB-005174132", null);
+  const [original] = await query(
+    "SELECT s.id FROM shipments s JOIN orders o ON o.id=s.order_id WHERE o.household_id=$1 AND o.merchant=$2",
+    [ctx.householdId, merchant],
+  );
+  await Promise.all([
+    ingest("format:ship", "Order #ab 005174132", "FORMATTRACK1"),
+    ingest("format:retry", "AB/005174132", "FORMATTRACK1"),
+  ]);
+  let rows = await query(
+    "SELECT s.id,s.tracking_number,s.order_id FROM shipments s JOIN orders o ON o.id=s.order_id WHERE o.household_id=$1 AND o.merchant=$2",
+    [ctx.householdId, merchant],
+  );
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].id, original.id);
+  assert.equal(rows[0].tracking_number, "FORMATTRACK1");
+  assert.equal(
+    (
+      await query("SELECT * FROM shipment_emails WHERE shipment_id=$1", [
+        original.id,
+      ])
+    ).length,
+    3,
+  );
+  assert.ok(
+    (
+      await query(
+        "SELECT * FROM shipment_emails WHERE shipment_id=$1 AND email_id=$2",
+        [original.id, confirmation],
+      )
+    ).length,
+  );
+  await ingest("format:split", "AB_005174132", "FORMATTRACK2");
+  rows = await query(
+    "SELECT s.order_id FROM shipments s JOIN orders o ON o.id=s.order_id WHERE o.household_id=$1 AND o.merchant=$2",
+    [ctx.householdId, merchant],
+  );
+  assert.equal(rows.length, 2);
+  assert.equal(new Set(rows.map((r) => r.order_id)).size, 1);
+  await ingest("format:different-digit", "AB-005174133", null);
+  assert.equal(
+    (
+      await query(
+        "SELECT * FROM orders WHERE household_id=$1 AND merchant=$2",
+        [ctx.householdId, merchant],
+      )
+    ).length,
+    2,
+  );
+});
+
+test("normalized order matches remain household and merchant scoped and ambiguous candidates require review", async () => {
+  const merchant = "Ambiguous formatting shop";
+  const [other] = await query(
+    "INSERT INTO households(name,forwarding_token,feed_token) VALUES('Formatting isolation',$1,$2) RETURNING id",
+    [randomToken(), randomToken()],
+  );
+  for (const [household, shop, number] of [
+    [ctx.householdId, merchant, "XY-123456"],
+    [ctx.householdId, merchant, "XY/123456"],
+    [other.id, merchant, "ZZ-987654"],
+    [ctx.householdId, "Another merchant", "ZZ/987654"],
+  ])
+    await query(
+      "INSERT INTO orders(household_id,merchant,merchant_key,order_number) VALUES($1,$2,lower($2),$3)",
+      [household, shop, number],
+    );
+  for (const [key, number, review] of [
+    ["ambiguous", "XY 123456", true],
+    ["isolated", "ZZ 987654", false],
+    ["exact", "XY-123456", false],
+  ] as const) {
+    const email = await incoming(`format:${key}`);
+    const parsed = extraction(null, "ordered");
+    parsed.orders[0].merchant = merchant;
+    parsed.orders[0].orderNumber = number;
+    await applyExtraction(email.id, parsed);
+    const [row] = await query(
+      "SELECT s.needs_review,s.review_reason,o.order_number FROM shipments s JOIN orders o ON o.id=s.order_id JOIN shipment_emails se ON se.shipment_id=s.id WHERE se.email_id=$1 AND s.household_id=$2",
+      [email.id, ctx.householdId],
+    );
+    assert.equal(row.order_number, number);
+    assert.equal(row.needs_review, review);
+    if (review) assert.match(row.review_reason, /Multiple orders match/);
+  }
+});
+
+test("Cometeer-style letter prefixes match with corroboration and preserve ambiguity", async () => {
+  const merchant = "Prefix regression coffee";
+  async function ingest(
+    key: string,
+    number: string,
+    track: string | null,
+    day = "2026-09-10",
+  ) {
+    const email = await incoming(key, `Coffee capsules ${track || ""}`);
+    const parsed = extraction(
+      track,
+      track ? "in_transit" : "ordered",
+      "2026-09-20",
+      ["Coffee capsules"],
+    );
+    Object.assign(parsed.orders[0], {
+      merchant,
+      orderNumber: number,
+      orderedAt: day,
+    });
+    await applyExtraction(email.id, parsed);
+  }
+  await ingest("prefix:confirmation", "98765432", null);
+  await ingest("prefix:shipment", "T98765432", "PREFIXTRACK1");
+  let rows = await query(
+    "SELECT s.id,s.tracking_number FROM shipments s JOIN orders o ON o.id=s.order_id WHERE o.household_id=$1 AND o.merchant=$2",
+    [ctx.householdId, merchant],
+  );
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].tracking_number, "PREFIXTRACK1");
+  await ingest("prefix:other-date", "T98765432", null, "2026-09-11");
+  rows = await query(
+    "SELECT * FROM orders WHERE household_id=$1 AND merchant=$2",
+    [ctx.householdId, merchant],
+  );
+  assert.equal(rows.length, 2);
+  await query(
+    "INSERT INTO orders(household_id,merchant,merchant_key,order_number,ordered_at,items) VALUES($1,$2,lower($2),'P98765432','2026-09-10',$3)",
+    [ctx.householdId, merchant, JSON.stringify([{ name: "Coffee capsules" }])],
+  );
+  await ingest("prefix:ambiguous", "X98765432", null);
+  // X can only match the unprefixed order; distinct prefixes are never stripped.
+  assert.equal(
+    (
+      await query(
+        "SELECT * FROM orders WHERE household_id=$1 AND merchant=$2",
+        [ctx.householdId, merchant],
+      )
+    ).length,
+    3,
+  );
+  for (const number of ["T87654321", "P87654321"])
+    await query(
+      "INSERT INTO orders(household_id,merchant,merchant_key,order_number,ordered_at,items) VALUES($1,$2,lower($2),$3,'2026-09-10',$4)",
+      [
+        ctx.householdId,
+        merchant,
+        number,
+        JSON.stringify([{ name: "Coffee capsules" }]),
+      ],
+    );
+  await ingest("prefix:multiple-candidates", "87654321", null);
+  const [ambiguous] = await query(
+    "SELECT s.needs_review FROM shipments s JOIN orders o ON o.id=s.order_id WHERE o.household_id=$1 AND o.merchant=$2 AND o.order_number='87654321'",
+    [ctx.householdId, merchant],
+  );
+  assert.equal(ambiguous.needs_review, true);
+});

@@ -16,6 +16,7 @@ import {
   trackingCodeFromLink,
 } from "./tracking-identity";
 import { trackingConfigured } from "./tracking-config";
+import { corroboratedOrderPrefix, orderNumberKey } from "./order-identity";
 const dateValue = (v: string | null) =>
   v && Number.isFinite(Date.parse(v)) ? new Date(v).toISOString() : null;
 export function cleanEmail(html: string, text: string) {
@@ -318,9 +319,46 @@ export async function applyExtraction(emailId: string, input: Extracted) {
           [e.household_id, merchantKey, o.orderNumber],
         )
       ).rows[0];
-      let matchedOrderPage = false;
+      let ambiguousOrderNumber = false;
+      const numberKey = orderNumberKey(o.orderNumber);
       const orderPage =
         orders.length === 1 ? orderPageReference(e.links) : null;
+      if (!order && numberKey) {
+        // Compare stored values too, so older imports and manual entries benefit
+        // without rewriting display values or merging existing records.
+        const candidates = (
+          await c.query(
+            `SELECT o.*,to_char(o.ordered_at,'YYYY-MM-DD') AS match_date,
+              (SELECT coalesce(jsonb_agg(e.links),'[]'::jsonb) FROM shipments s
+               JOIN shipment_emails se ON se.shipment_id=s.id
+               JOIN source_emails e ON e.id=se.email_id AND e.household_id=o.household_id
+               WHERE s.order_id=o.id AND s.household_id=o.household_id) AS source_links
+             FROM orders o WHERE o.household_id=$1 AND o.merchant_key=$2 AND o.order_number IS NOT NULL`,
+            [e.household_id, merchantKey],
+          )
+        ).rows.filter(
+          (candidate) =>
+            !(
+              orderPage &&
+              candidate.source_links.some((links: string[]) => {
+                const previousPage = orderPageReference(links);
+                return previousPage && previousPage !== orderPage;
+              })
+            ) &&
+            (orderNumberKey(candidate.order_number) === numberKey ||
+              corroboratedOrderPrefix(
+                { number: o.orderNumber, date: orderedAt, items: o.items },
+                {
+                  number: candidate.order_number,
+                  date: candidate.match_date,
+                  items: candidate.items,
+                },
+              )),
+        );
+        if (candidates.length === 1) order = candidates[0];
+        ambiguousOrderNumber = candidates.length > 1;
+      }
+      let matchedOrderPage = false;
       if (orderPage) {
         const candidates = (
           await c.query(
@@ -364,6 +402,7 @@ export async function applyExtraction(emailId: string, input: Extracted) {
           }
         }
       }
+      const unresolvedOrderMatch = !order && ambiguousOrderNumber;
       if (!order)
         order = (
           await c.query(
@@ -384,10 +423,13 @@ export async function applyExtraction(emailId: string, input: Extracted) {
           [orderedAt, JSON.stringify(o.items), order.id],
         );
       for (const s of o.shipments) {
-        let review = s.needsReview || !o.merchant;
+        let review = s.needsReview || !o.merchant || unresolvedOrderMatch;
         const reasons = [
           s.reviewReason,
           !o.merchant ? "Shop name needs confirmation." : null,
+          unresolvedOrderMatch
+            ? "Multiple orders match this order number after formatting normalization. Review before merging."
+            : null,
         ].filter(Boolean);
         let estimate = s.estimate;
         try {
