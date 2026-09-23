@@ -86,6 +86,8 @@ export type Email = {
   extraction?: unknown;
 };
 export type Settings = {
+  plan: "free" | "paid";
+  isAdmin: boolean;
   householdName: string;
   timeZone: string;
   forwardingAddress: string | null;

@@ -29,19 +29,20 @@ export default function PrivacyPage() {
       <p>
         Forwarded emails may include sender and recipient addresses, message
         bodies, order details, delivery addresses, tracking numbers, links, and
-        images. PorchPong stores the forwarded source messages, supported images,
-        extracted package details, tracking history, and changes you make.
+        images. PorchPong stores the forwarded source messages, supported
+        images, extracted package details, tracking history, and changes you
+        make.
       </p>
 
       <h2>How the information is used and shared</h2>
       <p>
         Postmark receives and delivers forwarded emails to PorchPong. OpenAI
         receives email text, links, and image references to extract order and
-        shipping information. EasyPost receives tracking numbers and carrier
-        information to retrieve delivery updates. AWS hosts PorchPong and its
-        database, and Cloudflare handles website traffic and domain services.
-        Google Fonts serves the website fonts. These services receive the data
-        needed to provide their part of PorchPong.
+        shipping information. For eligible accounts, EasyPost receives tracking
+        numbers and carrier information to retrieve delivery updates. AWS hosts
+        PorchPong and its database, and Cloudflare handles website traffic and
+        domain services. Google Fonts serves the website fonts. These services
+        receive the data needed to provide their part of PorchPong.
       </p>
       <p>
         Package information, forwarded or Gmail-imported messages, and images
@@ -136,8 +137,8 @@ export default function PrivacyPage() {
       </p>
       <p>
         For privacy questions or deletion requests, email{" "}
-        <a href="mailto:jgreco@gmail.com">jgreco@gmail.com</a>.
-        Changes to this policy will be posted here with an updated date.
+        <a href="mailto:jgreco@gmail.com">jgreco@gmail.com</a>. Changes to this
+        policy will be posted here with an updated date.
       </p>
     </main>
   );

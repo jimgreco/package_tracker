@@ -12,6 +12,7 @@ import { randomUUID } from "node:crypto";
 import { fedexConfigured } from "./tracking-config";
 import { fedexCarrierPattern } from "./tracking-identity";
 import { scheduleNotifications, deliverPush } from "./notifications";
+import { householdPlan } from "./plans";
 type Job = {
   id: string;
   kind: string;
@@ -43,22 +44,26 @@ export async function runOne() {
         await deliverPush(job.payload.deliveryId!);
         break;
       case "gmail_sync":
-        await syncGmail(job.payload.connectionId!, job.payload.generation!);
+        if ((await householdPlan(job.payload.householdId)) === "paid")
+          await syncGmail(job.payload.connectionId!, job.payload.generation!);
         break;
       case "parse_email":
         await extractEmail(job.payload.emailId!);
         break;
       case "track_register":
-        await registerTracking(job.payload.shipmentId!);
+        if ((await householdPlan(job.payload.householdId)) === "paid")
+          await registerTracking(job.payload.shipmentId!);
         break;
       case "track_refresh":
-        await refreshTracking(job.payload.shipmentId!);
+        if ((await householdPlan(job.payload.householdId)) === "paid")
+          await refreshTracking(job.payload.shipmentId!);
         break;
       case "track_webhook":
-        await applyTracker(
-          job.payload.shipmentId!,
-          trackerSchema.parse(job.payload.tracker),
-        );
+        if ((await householdPlan(job.payload.householdId)) === "paid")
+          await applyTracker(
+            job.payload.shipmentId!,
+            trackerSchema.parse(job.payload.tracker),
+          );
         break;
       case "google_sync":
         await syncShipment(job.payload.shipmentId!);
@@ -110,7 +115,7 @@ export async function schedule() {
     if (process.env.EASYPOST_API_KEY || fedexConfigured()) {
       const due = (
         await c.query(
-          `SELECT id,household_id,tracker_id FROM shipments WHERE is_demo=false AND archived_at IS NULL AND dismissed_at IS NULL AND tracking_number IS NOT NULL AND ($1::boolean OR trim(carrier) ~* $2) AND status NOT IN ('delivered','cancelled','return_to_sender') AND tracking_state<>'unsupported' AND (last_checked_at IS NULL OR last_checked_at<now()-CASE WHEN status='out_for_delivery' THEN interval '15 minutes' ELSE interval '4 hours' END) ORDER BY last_checked_at ASC NULLS FIRST LIMIT 200`,
+          `SELECT s.id,s.household_id,s.tracker_id FROM shipments s JOIN households h ON h.id=s.household_id WHERE h.plan='paid' AND s.is_demo=false AND s.archived_at IS NULL AND s.dismissed_at IS NULL AND s.tracking_number IS NOT NULL AND ($1::boolean OR trim(s.carrier) ~* $2) AND s.status NOT IN ('delivered','cancelled','return_to_sender') AND s.tracking_state<>'unsupported' AND (s.last_checked_at IS NULL OR s.last_checked_at<now()-CASE WHEN s.status='out_for_delivery' THEN interval '15 minutes' ELSE interval '4 hours' END) ORDER BY s.last_checked_at ASC NULLS FIRST LIMIT 200`,
           [!!process.env.EASYPOST_API_KEY, fedexCarrierPattern.source],
         )
       ).rows;
@@ -125,8 +130,9 @@ export async function schedule() {
     if (gmailConfigured()) {
       const due = (
         await c.query(
-          `SELECT g.id,g.household_id,g.generation FROM gmail_connections g
-        WHERE g.enabled=true AND g.needs_reconnect=false AND g.next_sync_at<=now() AND ($1::uuid IS NULL OR g.household_id=$1)
+          `SELECT g.id,g.household_id,g.generation FROM gmail_connections g JOIN households h ON h.id=g.household_id
+        WHERE h.plan='paid' AND g.enabled=true AND g.needs_reconnect=false AND g.next_sync_at<=now()
+          AND ($1::uuid IS NULL OR g.household_id=$1)
         AND NOT EXISTS(SELECT 1 FROM jobs j WHERE j.kind='gmail_sync' AND j.payload->>'connectionId'=g.id::text
           AND j.payload->>'generation'=g.generation AND j.status IN ('pending','running')) LIMIT 100`,
           [process.env.GMAIL_HOUSEHOLD_ID || null],

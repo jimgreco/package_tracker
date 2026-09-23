@@ -52,12 +52,12 @@
         status: "ordered")
       dismissed.dismissedAt = "2026-09-18T00:00:00Z"
       let settings = Settings(
-        householdName: "Sample household", timeZone: "America/New_York",
+        householdName: "Sample household", plan: "free", timeZone: "America/New_York",
         forwardingAddress: "sample@example.test",
         calendarFeedUrl: "https://example.test/private-fixture-feed.ics", demo: false,
         google: .init(connected: true, calendarId: "fixture", lastSyncedAt: "2026-09-19T15:55:00Z"),
         gmail: .init(
-          connected: true, email: "sample@example.test", enabled: true, needsReconnect: false,
+          connected: true, email: "sample@example.test", enabled: false, needsReconnect: false,
           lastSyncedAt: "2026-09-19T15:50:00Z", importedCount: 24, importing: false),
         worker: .init(lastSeenAt: "2026-09-19T15:59:00Z", failedJobs: 0), userName: "Sample member",
         account: .init(email: "sample@example.test"), householdId: household, role: "owner",

@@ -52,7 +52,7 @@ struct WalkthroughView: View {
             feature(
               "Settings", "Manage your household, notifications, and calendar connections.",
               "gearshape")
-            Text("Gmail import is optional and managed on the PorchPong website.").font(.footnote)
+            Text("Start free by forwarding order and shipping emails to your private household address in Settings. Eligible households can also import Gmail and use carrier API tracking.").font(.footnote)
               .foregroundStyle(.secondary)
           } else if step == 1 {
             Text(
@@ -122,6 +122,8 @@ struct WalkthroughView: View {
             Text(
               "Delivery and calendar updates continue while PorchPong is closed. When offline, you can browse saved packages; changes need a connection."
             )
+            Text("On the free plan, forward new shipping emails to keep packages up to date.")
+              .font(.footnote).foregroundStyle(.secondary)
           }
           if busy || calendar.busy { ProgressView("Working…") }
           if let error {

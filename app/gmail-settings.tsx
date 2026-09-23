@@ -17,6 +17,34 @@ export function GmailSettings({
   const [busy, setBusy] = useState("");
   const [importRecent, setImportRecent] = useState(false);
   const g = s.gmail;
+  if (s.plan === "free")
+    return (
+      <section className="settings-card gmail-settings">
+        <div className="settings-title">
+          <Mail size={21} />
+          <h2>Gmail import</h2>
+        </div>
+        <p>
+          Gmail import is available to eligible households. Forward order and
+          shipping emails to your private household address for updates.
+        </p>
+        {g.connected && (
+          <>
+            <p>
+              Your previous Gmail connection is paused. Already imported
+              packages remain available.
+            </p>
+            <button
+              className="secondary"
+              disabled={!!busy}
+              onClick={() => action("disconnect")}
+            >
+              Disconnect Gmail
+            </button>
+          </>
+        )}
+      </section>
+    );
   async function connect() {
     setBusy("connect");
     try {

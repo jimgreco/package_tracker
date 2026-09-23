@@ -302,6 +302,20 @@ export function SettingsView({
           </div>
           <h3>{s.userName}</h3>
           <p>{s.account.email}</p>
+          <p>
+            <strong>
+              {s.plan === "paid" ? "Enhanced access" : "Free access"}
+            </strong>{" "}
+            ·{" "}
+            {s.plan === "paid"
+              ? "Gmail import and carrier API tracking"
+              : "Forward emails for package and delivery updates"}
+          </p>
+          {s.isAdmin && (
+            <p>
+              <a href="/admin">Manage all accounts →</a>
+            </p>
+          )}
           <div className="permission-note">
             <GoogleMark />
             <span>Signed in with Google</span>
@@ -619,47 +633,51 @@ export function SettingsView({
               : "Email receiving needs to be configured on your server before your forwarding address is ready."}
           </div>
         )}
-        <div className="settings-divider" />
-        <h3>Connected services</h3>
-        {[
-          ["OpenAI · email extraction", s.services.openai],
-          ["Postmark · incoming email", s.services.postmark],
-          ["EasyPost · delivery tracking", s.services.easypost],
-          ["Google · calendar connection", s.services.google],
-        ].map(([name, on]) => (
-          <div className="setting-row" key={String(name)}>
-            <span>{name}</span>
-            <span className={"status " + (on ? "status-delivered" : "")}>
-              {on ? "Configured" : "Setup needed"}
-            </span>
-          </div>
-        ))}
-        <details className="setup-details">
-          <summary>Service setup</summary>
-          <p>
-            The person hosting PorchPong can connect these services in the
-            server’s environment configuration. The project README includes the
-            exact steps.
-          </p>
-          <dl>
-            <dt>Incoming email</dt>
-            <dd>
-              Postmark inbound webhook: <code>/api/webhooks/postmark</code>
-            </dd>
-            <dt>Tracking updates</dt>
-            <dd>
-              EasyPost webhook: <code>/api/webhooks/easypost</code>
-            </dd>
-            <dt>Google authorization</dt>
-            <dd>
-              Redirect path: <code>/api/google/callback</code>
-            </dd>
-          </dl>
-          <p>
-            Images and shipping text are processed to extract your packages. You
-            can review the source emails in Inbox.
-          </p>
-        </details>
+        {s.isAdmin && (
+          <>
+            <div className="settings-divider" />
+            <h3>Connected services</h3>
+            {[
+              ["OpenAI · email extraction", s.services.openai],
+              ["Postmark · incoming email", s.services.postmark],
+              ["EasyPost · delivery tracking", s.services.easypost],
+              ["Google · calendar connection", s.services.google],
+            ].map(([name, on]) => (
+              <div className="setting-row" key={String(name)}>
+                <span>{name}</span>
+                <span className={"status " + (on ? "status-delivered" : "")}>
+                  {on ? "Configured" : "Setup needed"}
+                </span>
+              </div>
+            ))}
+            <details className="setup-details">
+              <summary>Service setup</summary>
+              <p>
+                The person hosting PorchPong can connect these services in the
+                server’s environment configuration. The project README includes
+                the exact steps.
+              </p>
+              <dl>
+                <dt>Incoming email</dt>
+                <dd>
+                  Postmark inbound webhook: <code>/api/webhooks/postmark</code>
+                </dd>
+                <dt>Tracking updates</dt>
+                <dd>
+                  EasyPost webhook: <code>/api/webhooks/easypost</code>
+                </dd>
+                <dt>Google authorization</dt>
+                <dd>
+                  Redirect path: <code>/api/google/callback</code>
+                </dd>
+              </dl>
+              <p>
+                Images and shipping text are processed to extract your packages.
+                You can review the source emails in Inbox.
+              </p>
+            </details>
+          </>
+        )}
       </section>
       <section className="settings-card">
         <div className="settings-title">
@@ -673,7 +691,11 @@ export function SettingsView({
             {stale ? "Not running" : "Running"}
           </span>
         </div>
-        <p>Delivery tracking continues on the server when the app is closed.</p>
+        <p>
+          {s.plan === "paid"
+            ? "Gmail import and carrier checks continue on the server when the app is closed."
+            : "Forwarded emails and calendar updates continue on the server when the app is closed."}
+        </p>
         <div className="setting-row">
           <span>Worker last seen</span>
           <strong>{since(s.worker.lastSeenAt)}</strong>

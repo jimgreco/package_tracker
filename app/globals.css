@@ -9,6 +9,32 @@
   --white: #fff;
   --radius: 16px;
 }
+.admin-page {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 32px 20px 80px;
+}
+.admin-page h1 {
+  margin: 16px 0 4px;
+}
+.admin-accounts {
+  display: grid;
+  gap: 16px;
+  margin-top: 24px;
+}
+.admin-accounts .settings-card {
+  width: 100%;
+}
+.admin-accounts select {
+  display: block;
+  max-width: 100%;
+  margin-top: 8px;
+}
+.admin-account-id {
+  color: var(--muted);
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
 * {
   box-sizing: border-box;
 }

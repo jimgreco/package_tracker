@@ -15,6 +15,7 @@ import {
   rateLimit,
 } from "./security";
 import { receiveEmail } from "./email";
+import { requirePaid } from "./plans";
 import {
   bodyParts,
   decodeMessage,
@@ -39,6 +40,7 @@ export function gmailConfigured() {
 export function gmailAvailable(ctx: Context) {
   return (
     gmailConfigured() &&
+    ctx.plan === "paid" &&
     (!process.env.GMAIL_HOUSEHOLD_ID ||
       process.env.GMAIL_HOUSEHOLD_ID === ctx.householdId)
   );
@@ -48,6 +50,7 @@ export function gmailCookie(value = "") {
 }
 export async function gmailStart(ctx: Context, input: unknown) {
   requireReal(ctx);
+  await requirePaid(ctx.householdId);
   if (!gmailAvailable(ctx))
     throw new AppError(
       "Gmail connection is not enabled for this household.",
@@ -133,6 +136,7 @@ async function tokens(params: Record<string, string>) {
 }
 export async function gmailCallback(ctx: Context, req: Request) {
   requireReal(ctx);
+  await requirePaid(ctx.householdId);
   if (!gmailAvailable(ctx))
     throw new AppError("Gmail is not enabled for this household.", 503);
   const url = new URL(req.url),
@@ -253,6 +257,8 @@ export async function gmailAction(
   action: "pause" | "resume" | "disconnect" | "sync",
 ) {
   requireReal(ctx);
+  if (action !== "disconnect" && action !== "pause")
+    await requirePaid(ctx.householdId);
   await rateLimit(`gmail-action:${ctx.userId}`, 20, 3600);
   await transaction(async (c) => {
     await c.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
@@ -359,7 +365,7 @@ export async function syncGmail(connectionId: string, generation: string) {
     ).rows[0].locked;
     if (!acquired) return;
     let [g] = await query(
-      "SELECT * FROM gmail_connections WHERE id=$1 AND generation=$2 AND enabled=true AND needs_reconnect=false",
+      "SELECT g.* FROM gmail_connections g JOIN households h ON h.id=g.household_id WHERE g.id=$1 AND g.generation=$2 AND g.enabled=true AND g.needs_reconnect=false AND h.plan='paid'",
       [connectionId, generation],
     );
     if (

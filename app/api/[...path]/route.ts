@@ -47,6 +47,7 @@ import { calendarFeed } from "@/lib/calendar";
 import { postmarkSchema, receiveEmail } from "@/lib/email";
 import { trackingWebhook } from "@/lib/tracking";
 import { trackingConfigured } from "@/lib/tracking-config";
+import { adminAccounts, requirePaid, setHouseholdPlan } from "@/lib/plans";
 import { googleStart, googleCallback, disconnectGoogle } from "@/lib/google";
 import {
   googleSigninStart,
@@ -304,6 +305,22 @@ async function handle(
     const ctx =
       requestContext ?? (await context(req, route !== "google/callback"));
     requestContext = ctx;
+    if (route === "admin/accounts" && method === "GET")
+      return json(await adminAccounts(ctx));
+    if (
+      path[0] === "admin" &&
+      path[1] === "accounts" &&
+      path.length === 4 &&
+      path[3] === "plan" &&
+      method === "PATCH"
+    ) {
+      const { plan } = z
+        .object({ plan: z.enum(["free", "paid"]) })
+        .strict()
+        .parse(await jsonBody(req, 4096));
+      await setHouseholdPlan(ctx, uuid.parse(path[2]), plan);
+      return json({ ok: true });
+    }
     if (route === "native/auth/logout" && method === "POST") {
       if (!ctx.nativeSessionHash)
         throw new AppError("A native session is required.", 401);
@@ -397,22 +414,37 @@ async function handle(
         return json({ id: await saveManual(await jsonBody(req), ctx, id) });
       if (
         path.length === 3 &&
-        ["deliver", "dismiss", "restore", "collect", "uncollect", "snooze", "unsnooze"].includes(
-          path[2],
-        ) &&
+        [
+          "deliver",
+          "dismiss",
+          "restore",
+          "collect",
+          "uncollect",
+          "snooze",
+          "unsnooze",
+        ].includes(path[2]) &&
         method === "POST"
       ) {
         await quickShipmentAction(
           id,
           ctx,
           z
-            .enum(["deliver", "dismiss", "restore", "collect", "uncollect", "snooze", "unsnooze"])
+            .enum([
+              "deliver",
+              "dismiss",
+              "restore",
+              "collect",
+              "uncollect",
+              "snooze",
+              "unsnooze",
+            ])
             .parse(path[2]),
         );
         return json({ ok: true });
       }
       if (path[2] === "refresh" && method === "POST") {
         requireReal(ctx);
+        await requirePaid(ctx.householdId);
         const { row } = await shipment(id, ctx.householdId);
         await rateLimit(`refresh:${id}`, 4, 3600);
         if (!row.tracking_number)

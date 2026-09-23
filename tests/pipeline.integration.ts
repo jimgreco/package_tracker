@@ -26,6 +26,8 @@ import {
 import { claimJob, runOne, schedule } from "../lib/jobs";
 import { encrypt, randomToken } from "../lib/security";
 import { syncShipment } from "../lib/google";
+import { adminAccounts, setHouseholdPlan, householdPlan } from "../lib/plans";
+import { gmailStart } from "../lib/gmail";
 import { fedexFixture } from "./fixtures/fedex";
 const originalUrl = process.env.DATABASE_URL!;
 const dbUrl = new URL(originalUrl);
@@ -68,10 +70,11 @@ before(async () => {
     "010_delivery_features.sql",
     "011_native_calendar.sql",
     "012_snoozed.sql",
+    "013_plans.sql",
   ])
     await query(await readFile("db/" + file, "utf8"));
   const [h] = await query(
-    "INSERT INTO households(name,forwarding_token,feed_token) VALUES($1,$2,$3) RETURNING *",
+    "INSERT INTO households(name,forwarding_token,feed_token,plan) VALUES($1,$2,$3,'paid') RETURNING *",
     ["Test household", randomToken(), randomToken()],
   );
   const [u] = await query(
@@ -92,6 +95,7 @@ before(async () => {
     forwardingToken: h.forwarding_token,
     feedToken: h.feed_token,
     demo: false,
+    plan: "paid",
   };
   globalThis.fetch = async () => {
     throw new Error("Unexpected external call in integration test.");
@@ -1029,7 +1033,9 @@ test("snoozed packages wake on a new carrier event or source email, not an uncha
   await quickShipmentAction(s.id, ctx, "snooze");
   await quickShipmentAction(s.id, ctx, "snooze");
   assert.ok((await shipment(s.id)).shipment.snoozedAt);
-  await query("UPDATE shipments SET tracker_id='trk_snooze' WHERE id=$1", [s.id]);
+  await query("UPDATE shipments SET tracker_id='trk_snooze' WHERE id=$1", [
+    s.id,
+  ]);
   const tracker = {
     id: "trk_snooze",
     tracking_code: "TRACKSNOOZE",
@@ -1041,11 +1047,13 @@ test("snoozed packages wake on a new carrier event or source email, not an uncha
   assert.ok((await shipment(s.id)).shipment.snoozedAt);
   const update = {
     ...tracker,
-    tracking_details: [{
-      datetime: "2026-09-21T12:00:00Z",
-      status: "in_transit",
-      message: "Package processed at carrier facility.",
-    }],
+    tracking_details: [
+      {
+        datetime: "2026-09-21T12:00:00Z",
+        status: "in_transit",
+        message: "Package processed at carrier facility.",
+      },
+    ],
   };
   await applyTracker(s.id, update);
   assert.equal((await shipment(s.id)).shipment.snoozedAt, null);
@@ -1070,7 +1078,11 @@ test("snoozed packages wake on a new carrier event or source email, not an uncha
   await applyExtraction(later.id, initial);
   assert.equal((await shipment(s.id)).shipment.snoozedAt, null);
   assert.equal(
-    (await query("SELECT count(*)::int n FROM shipments WHERE tracking_number='TRACKSNOOZE'"))[0].n,
+    (
+      await query(
+        "SELECT count(*)::int n FROM shipments WHERE tracking_number='TRACKSNOOZE'",
+      )
+    )[0].n,
     1,
   );
   await quickShipmentAction(s.id, ctx, "snooze");
@@ -2081,4 +2093,61 @@ test("Cometeer-style letter prefixes match with corroboration and preserve ambig
     [ctx.householdId, merchant],
   );
   assert.equal(ambiguous.needs_review, true);
+});
+
+test("admin grants paid access and free accounts use forwarding without provider tracking", async () => {
+  await assert.rejects(adminAccounts(ctx), { status: 403 });
+  await assert.rejects(setHouseholdPlan(ctx, ctx.householdId, "free"), {
+    status: 403,
+  });
+  await query("UPDATE users SET platform_admin=true WHERE id=$1", [ctx.userId]);
+  const accounts = await adminAccounts(ctx);
+  assert.ok(accounts.some((account) => account.id === ctx.householdId));
+  await setHouseholdPlan(ctx, ctx.householdId, "free");
+  assert.equal(await householdPlan(ctx.householdId), "free");
+  await assert.rejects(
+    gmailStart({ ...ctx, plan: "free" }, { importRecent: false }),
+    { status: 403 },
+  );
+
+  const email = await incoming(
+    "free-plan-forwarded",
+    "Test Shop FREEPLAN123 Trail shoes UPS shipping update",
+  );
+  const parsed = extraction("FREEPLAN123");
+  parsed.orders[0].merchant = "Free Plan Shop";
+  parsed.orders[0].orderNumber = "FREE-ORDER-123";
+  await applyExtraction(email.id, parsed);
+  const [saved] = await query(
+    "SELECT s.id,s.tracking_state FROM shipments s JOIN orders o ON o.id=s.order_id WHERE s.household_id=$1 AND o.order_number='FREE-ORDER-123'",
+    [ctx.householdId],
+  );
+  assert.ok(saved);
+  assert.equal(saved.tracking_state, "none");
+  assert.equal(
+    (
+      await query(
+        "SELECT 1 FROM jobs WHERE kind='track_register' AND payload->>'shipmentId'=$1",
+        [saved.id],
+      )
+    ).length,
+    0,
+  );
+  await registerTracking(saved.id);
+  assert.equal(
+    (await query("SELECT tracker_id FROM shipments WHERE id=$1", [saved.id]))[0]
+      .tracker_id,
+    null,
+  );
+
+  await setHouseholdPlan(ctx, ctx.householdId, "paid");
+  assert.equal(await householdPlan(ctx.householdId), "paid");
+  assert.ok(
+    (
+      await query(
+        "SELECT 1 FROM jobs WHERE kind='track_register' AND payload->>'shipmentId'=$1",
+        [saved.id],
+      )
+    ).length > 0,
+  );
 });

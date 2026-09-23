@@ -94,7 +94,7 @@ before(async () => {
   };
   async function account(name: string) {
     const [h] = await query(
-      "INSERT INTO households(name,forwarding_token,feed_token) VALUES($1,$2,$3) RETURNING *",
+      "INSERT INTO households(name,forwarding_token,feed_token,plan) VALUES($1,$2,$3,'paid') RETURNING *",
       [name, randomToken(), randomToken()],
     );
     const [u] = await query(
@@ -115,6 +115,7 @@ before(async () => {
       forwardingToken: h.forwarding_token,
       feedToken: h.feed_token,
       demo: false,
+      plan: "paid" as const,
     };
   }
   ctx = await account("gmail-owner");
@@ -496,20 +497,27 @@ test("Household switching does not redirect a member’s connected inbox", async
   assert.equal((await connection()).household_id, ctx.householdId);
 });
 
-test("Personal-use household restriction blocks both connection and background ingestion elsewhere", async () => {
+test("Free household plan blocks Gmail connection and background ingestion", async () => {
   const g = await connection();
-  process.env.GMAIL_HOUSEHOLD_ID = other.householdId;
+  await query("UPDATE households SET plan='free' WHERE id=$1", [
+    ctx.householdId,
+  ]);
   try {
     await assert.rejects(
       () => gmailStart(ctx, { importRecent: false }),
-      /not enabled for this household/,
+      /eligible households/,
     );
-    assert.equal((await settings(ctx)).services.gmail, false);
+    assert.equal(
+      (await settings({ ...ctx, plan: "free" })).services.gmail,
+      false,
+    );
     gmailFetch = async () => {
-      throw new Error("Restricted household must not read Gmail");
+      throw new Error("Free household must not read Gmail");
     };
     await syncGmail(g.id, g.generation);
   } finally {
-    delete process.env.GMAIL_HOUSEHOLD_ID;
+    await query("UPDATE households SET plan='paid' WHERE id=$1", [
+      ctx.householdId,
+    ]);
   }
 });

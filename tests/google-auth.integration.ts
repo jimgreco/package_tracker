@@ -50,6 +50,7 @@ before(async () => {
     "010_delivery_features.sql",
     "011_native_calendar.sql",
     "012_snoozed.sql",
+    "013_plans.sql",
   ])
     await query(await readFile("db/" + file, "utf8"));
   keys = await generateKeyPair("RS256");
@@ -1132,5 +1133,29 @@ test("native Calendar consent is browser-bound, scoped, retry-safe and independe
     assert.equal(exchanges, 1);
   } finally {
     globalThis.fetch = authFetch;
+  }
+});
+
+test("the two initial paid identities are seeded and only Jim receives admin access", async () => {
+  for (const [email, subject, admin] of [
+    ["jgreco@gmail.com", "paid-jim", true],
+    ["rachel.ingwer@gmail.com", "paid-rachel", false],
+  ] as const) {
+    const { response } = await finish(await start(), {
+      email,
+      sub: subject,
+      name: email.split("@")[0],
+    });
+    assert.equal(authError(response), null);
+    const session = authSession(response)!;
+    const dashboard = await (
+      await call("dashboard", undefined, session)
+    ).json();
+    assert.equal(dashboard.settings.plan, "paid");
+    assert.equal(dashboard.settings.isAdmin, admin);
+    assert.equal(
+      (await call("admin/accounts", undefined, session)).status,
+      admin ? 200 : 403,
+    );
   }
 });

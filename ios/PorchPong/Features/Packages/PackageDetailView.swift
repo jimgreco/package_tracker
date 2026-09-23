@@ -50,6 +50,10 @@ struct PackageDetailView: View {
           if let tracking = s.trackingNumber { copyRow("Tracking number", tracking) }
           LabeledContent(
             "Last tracking check", value: Dates.timestamp(s.lastCheckedAt, zone: store.timeZone))
+          if store.dashboard?.settings.plan == "free" {
+            Text("Forward another shipping email for updates. Carrier API tracking is available to eligible households.")
+              .font(.footnote).foregroundStyle(.secondary)
+          }
           if let event = detail.events.first {
             LabeledContent("Latest update source", value: event.source)
           }
@@ -67,7 +71,7 @@ struct PackageDetailView: View {
           {
             Link("Open tracking website", destination: url)
           }
-          Button(
+          if store.dashboard?.settings.plan == "paid" { Button(
             store.trackingRequested.contains(id)
               ? "Tracking check requested · check again" : "Check tracking"
           ) {
@@ -75,7 +79,7 @@ struct PackageDetailView: View {
               await store.action(s, "refresh")
               await load()
             }
-          }.disabled(!store.canWrite || s.trackingNumber == nil)
+          }.disabled(!store.canWrite || s.trackingNumber == nil) }
           if s.status == "delivered" && s.dismissedAt == nil {
             Button(s.collectedAt == nil ? "Mark collected" : "Undo collection") {
               Task {

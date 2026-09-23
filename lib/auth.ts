@@ -19,6 +19,7 @@ export type Context = {
   forwardingToken: string;
   feedToken: string;
   demo: boolean;
+  plan: "free" | "paid";
   nativeSessionHash?: string;
 };
 export async function context(
@@ -39,12 +40,12 @@ export async function context(
   const nativeToken = authorization?.slice(7);
   let rows = nativeToken
     ? await query(
-        `SELECT u.*,h.name household_name,h.time_zone,h.forwarding_token,h.feed_token,h.is_demo FROM native_sessions s JOIN users u ON u.id=s.user_id JOIN households h ON h.id=u.household_id JOIN household_members m ON m.household_id=h.id AND m.user_id=u.id WHERE s.token_hash=$1 AND s.expires_at>now()`,
+        `SELECT u.*,h.name household_name,h.time_zone,h.forwarding_token,h.feed_token,h.is_demo,h.plan FROM native_sessions s JOIN users u ON u.id=s.user_id JOIN households h ON h.id=u.household_id JOIN household_members m ON m.household_id=h.id AND m.user_id=u.id WHERE s.token_hash=$1 AND s.expires_at>now()`,
         [hash(nativeToken)],
       )
     : token
       ? await query(
-          `SELECT u.*,h.name household_name,h.time_zone,h.forwarding_token,h.feed_token,h.is_demo FROM sessions s JOIN users u ON u.id=s.user_id JOIN households h ON h.id=u.household_id JOIN household_members m ON m.household_id=h.id AND m.user_id=u.id WHERE s.token_hash=$1 AND s.expires_at>now()`,
+          `SELECT u.*,h.name household_name,h.time_zone,h.forwarding_token,h.feed_token,h.is_demo,h.plan FROM sessions s JOIN users u ON u.id=s.user_id JOIN households h ON h.id=u.household_id JOIN household_members m ON m.household_id=h.id AND m.user_id=u.id WHERE s.token_hash=$1 AND s.expires_at>now()`,
           [hash(token)],
         )
       : [];
@@ -56,7 +57,7 @@ export async function context(
     ["localhost", "127.0.0.1"].includes(new URL(origin()).hostname)
   )
     rows = await query(
-      `SELECT u.*,h.name household_name,h.time_zone,h.forwarding_token,h.feed_token,h.is_demo FROM users u JOIN households h ON h.id=u.household_id WHERE u.id=$1`,
+      `SELECT u.*,h.name household_name,h.time_zone,h.forwarding_token,h.feed_token,h.is_demo,h.plan FROM users u JOIN households h ON h.id=u.household_id WHERE u.id=$1`,
       [DEMO_USER],
     );
   const u = rows[0];
@@ -75,6 +76,7 @@ export async function context(
     forwardingToken: u.forwarding_token,
     feedToken: u.feed_token,
     demo: u.is_demo,
+    plan: u.plan,
   };
 }
 export async function sessionCookie(userId: string) {

@@ -294,6 +294,10 @@ export async function applyExtraction(emailId: string, input: Extracted) {
         emailId,
       ])
     ).rows;
+    const [home] = (
+      await c.query("SELECT plan FROM households WHERE id=$1", [e.household_id])
+    ).rows;
+    const paid = home.plan === "paid";
     if (e.status === "processed" || e.status === "ignored") return;
     if (!orders.length) {
       await c.query(
@@ -547,7 +551,7 @@ export async function applyExtraction(emailId: string, input: Extracted) {
             !existing.dismissed_at &&
             !existing.archived_at &&
             !existing.manual_override &&
-            !existing.tracker_id &&
+            (!existing.tracker_id || !paid) &&
             !terminal;
           saved = (
             await c.query(
@@ -589,7 +593,7 @@ export async function applyExtraction(emailId: string, input: Extracted) {
                 dateValue(s.deliveredAt),
                 review,
                 reasons.join(" ") || null,
-                tracking
+                paid && tracking
                   ? trackingConfigured(s.carrier)
                     ? "pending"
                     : "unconfigured"
@@ -614,6 +618,7 @@ export async function applyExtraction(emailId: string, input: Extracted) {
           ],
         );
         if (
+          paid &&
           tracking &&
           !saved.tracker_id &&
           !saved.dismissed_at &&

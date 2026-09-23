@@ -208,6 +208,18 @@ export async function googleSigninCallback(req: Request) {
           user.id,
           identity.sub,
         ]);
+        if (
+          ["jgreco@gmail.com", "rachel.ingwer@gmail.com"].includes(
+            identity.email,
+          )
+        )
+          await c.query("UPDATE households SET plan='paid' WHERE id=$1", [
+            user.household_id,
+          ]);
+        if (identity.email === "jgreco@gmail.com")
+          await c.query("UPDATE users SET platform_admin=true WHERE id=$1", [
+            user.id,
+          ]);
       } else {
         const householdId =
           invitations[0]?.household_id ||
@@ -231,6 +243,18 @@ export async function googleSigninCallback(req: Request) {
           "INSERT INTO household_members(household_id,user_id,role) VALUES($1,$2,$3)",
           [householdId, user.id, invitations.length ? "member" : "owner"],
         );
+        if (
+          ["jgreco@gmail.com", "rachel.ingwer@gmail.com"].includes(
+            identity.email,
+          )
+        )
+          await c.query("UPDATE households SET plan='paid' WHERE id=$1", [
+            householdId,
+          ]);
+        if (identity.email === "jgreco@gmail.com")
+          await c.query("UPDATE users SET platform_admin=true WHERE id=$1", [
+            user.id,
+          ]);
       }
     }
     await c.query("UPDATE users SET google_email=$2 WHERE id=$1", [

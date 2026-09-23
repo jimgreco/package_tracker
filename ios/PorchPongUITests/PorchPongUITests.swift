@@ -242,10 +242,11 @@ import XCTest
     app.tabBars.buttons["Settings"].tap()
     XCTAssertTrue(app.staticTexts["sample@example.test"].firstMatch.waitForExistence(timeout: 5))
     screenshot("settings")
-    let manage = app.buttons["Manage connections on website"]
-    reveal(manage)
-    XCTAssertTrue(manage.exists)
-    screenshot("connections")
+    XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS 'Forward emails for package updates'")).firstMatch.exists)
+    let freeGmail = app.staticTexts.containing(NSPredicate(format: "label CONTAINS 'Available to eligible households'")).firstMatch
+    reveal(freeGmail)
+    XCTAssertTrue(freeGmail.exists)
+    screenshot("free-account")
   }
   func testOfflineAndMalformedStates() {
     launch(["--offline"])

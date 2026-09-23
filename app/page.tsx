@@ -885,6 +885,10 @@ export default function Page() {
                   <a className="privacy-link" href="/privacy">
                     Privacy policy
                   </a>
+                  {" · "}
+                  <a className="privacy-link" href="/support">
+                    Support
+                  </a>
                 </span>
               </footer>
             </>
@@ -1071,6 +1075,11 @@ export default function Page() {
                   This is a sample package. Tracking history illustrates how
                   live updates will appear.
                 </div>
+              ) : data?.settings.plan === "free" ? (
+                <div className="info-box">
+                  Forward a new shipping email to update this package. Carrier
+                  API checks are available to eligible households.
+                </div>
               ) : (
                 ["unsupported", "unconfigured", "error"].includes(
                   detail.shipment.trackingState,
@@ -1174,23 +1183,25 @@ export default function Page() {
                     <ExternalLink size={15} />
                   </a>
                 )}
-                <button
-                  className="secondary"
-                  disabled={
-                    busy === "refresh" ||
-                    detail.shipment.isDemo ||
-                    !detail.shipment.trackingNumber
-                  }
-                  onClick={() =>
-                    action("refresh", async () => {
-                      await api(`shipments/${selected}/refresh`, {});
-                      notify("Tracking refresh queued.");
-                    })
-                  }
-                >
-                  <RefreshCw size={16} />
-                  Refresh
-                </button>
+                {data?.settings.plan === "paid" && (
+                  <button
+                    className="secondary"
+                    disabled={
+                      busy === "refresh" ||
+                      detail.shipment.isDemo ||
+                      !detail.shipment.trackingNumber
+                    }
+                    onClick={() =>
+                      action("refresh", async () => {
+                        await api(`shipments/${selected}/refresh`, {});
+                        notify("Tracking refresh queued.");
+                      })
+                    }
+                  >
+                    <RefreshCw size={16} />
+                    Refresh
+                  </button>
+                )}
               </div>
               <h3 className="detail-section-title">Delivery history</h3>
               {detail.events.length ? (

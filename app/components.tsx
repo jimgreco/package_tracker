@@ -562,6 +562,10 @@ export function AuthForm({
         <a className="privacy-link" href="/privacy">
           Privacy policy
         </a>
+        {" · "}
+        <a className="privacy-link" href="/support">
+          Support
+        </a>
       </small>
       <div className="auth-household-note">
         <Users size={20} />

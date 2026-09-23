@@ -308,7 +308,7 @@ a connection; logout, removal, household switching, and disconnect invalidate
 pending consent. Disconnect leaves Google's calendar and existing events intact.
 
 Gmail setup, reconnect, history-range selection, and grant management remain on
-the website. Preserve `GMAIL_HOUSEHOLD_ID` and Gmail's existing account restrictions.
+the website. Require a paid household for Gmail, preserve `GMAIL_HOUSEHOLD_ID`, and preserve its account restrictions.
 Native sign-in and sign-out must not create, replace, or disconnect provider grants.
 Background imports and calendar updates continue when the app is closed. Neither
 connection is required to use the iPhone app.

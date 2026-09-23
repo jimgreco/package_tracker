@@ -12,7 +12,10 @@ export function calendarBrowserCookie(value = "") {
 export async function nativeCalendarStart(ctx: Context, input: unknown) {
   requireReal(ctx);
   if (!ctx.nativeSessionHash)
-    throw new AppError("Use the PorchPong iPhone app to connect Calendar.", 403);
+    throw new AppError(
+      "Use the PorchPong iPhone app to connect Calendar.",
+      403,
+    );
   const { state } = z
     .object({ state: z.string().regex(/^[A-Za-z0-9_-]{43,128}$/) })
     .strict()
@@ -31,7 +34,7 @@ export async function nativeCalendarStart(ctx: Context, input: unknown) {
 }
 async function attemptContext(id: string): Promise<Context> {
   const [r] = await query(
-    `SELECT u.id,u.name,u.email,h.id household_id,h.name household_name,h.time_zone,h.forwarding_token,h.feed_token,n.session_hash
+    `SELECT u.id,u.name,u.email,h.id household_id,h.name household_name,h.time_zone,h.forwarding_token,h.feed_token,h.plan,n.session_hash
     FROM native_calendar_attempts n JOIN native_sessions s ON s.token_hash=n.session_hash AND s.expires_at>now()
     JOIN users u ON u.id=n.user_id AND u.id=s.user_id AND u.household_id=n.household_id
     JOIN household_members m ON m.user_id=u.id AND m.household_id=n.household_id
@@ -54,6 +57,7 @@ async function attemptContext(id: string): Promise<Context> {
     feedToken: r.feed_token,
     nativeSessionHash: r.session_hash,
     demo: false,
+    plan: r.plan,
   };
 }
 export async function nativeCalendarAuthorize(req: Request) {

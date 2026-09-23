@@ -22,6 +22,11 @@ struct SettingsView: View {
         Section("Account") {
           Text(settings.userName).font(.headline)
           Text(settings.account.email).textSelection(.enabled)
+          LabeledContent("Access", value: settings.plan == "paid" ? "Enhanced" : "Free")
+          if settings.plan == "free" {
+            Text("Forward emails for package updates. Gmail import and carrier API tracking are available to eligible households.")
+              .font(.footnote).foregroundStyle(.secondary)
+          }
         }
         Section("Household") {
           LabeledContent("Name", value: settings.householdName)
@@ -73,7 +78,7 @@ struct SettingsView: View {
             Text("Forwarding is currently unavailable.").foregroundStyle(.secondary)
           }
         }
-        Section("Gmail import") {
+        if settings.plan == "paid" { Section("Gmail import") {
           LabeledContent(
             "Status",
             value: settings.gmail.connected
@@ -100,6 +105,16 @@ struct SettingsView: View {
           Link("Manage connections on website", destination: Configuration.websiteSettings)
           Text("Gmail import is managed on the website. Safari may ask you to sign in separately.")
             .font(.caption).foregroundStyle(.secondary)
+        } } else {
+          Section("Gmail import") {
+            Text("Available to eligible households. Forward order and shipping emails to your household address for updates.")
+              .font(.footnote).foregroundStyle(.secondary)
+            if settings.gmail.connected {
+              Text("Your previous Gmail connection is paused. Manage or disconnect it on the website.")
+                .font(.footnote).foregroundStyle(.secondary)
+              Link("Manage previous Gmail connection", destination: Configuration.websiteSettings)
+            }
+          }
         }
         Section("Google Calendar") {
           LabeledContent("Status", value: settings.google.connected ? "Connected" : "Not connected")

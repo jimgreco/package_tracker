@@ -204,6 +204,7 @@ struct Settings: Codable, Sendable {
     var failedJobs: Int
   }
   var householdName: String
+  var plan: String
   var timeZone: String
   var forwardingAddress: String?
   var calendarFeedUrl: String

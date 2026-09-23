@@ -74,6 +74,7 @@ export function trackerStatus(status: string, detail?: string | null): Status {
 }
 export async function registerTracking(id: string) {
   const { shipment: s, row } = await shipment(id);
+  if (row.plan !== "paid") return;
   if (s.isDemo || s.dismissedAt || s.archivedAt) return;
   if (!s.trackingNumber) return;
   if (isFedex(s.carrier) && fedexConfigured()) return refreshFedex(id);
@@ -119,6 +120,7 @@ export async function registerTracking(id: string) {
 }
 export async function refreshTracking(id: string) {
   const { shipment: s, row } = await shipment(id);
+  if (row.plan !== "paid") return;
   if (s.isDemo || s.dismissedAt || s.archivedAt) return;
   if (isFedex(s.carrier) && fedexConfigured()) return refreshFedex(id);
   if (row.tracker_id?.startsWith("fedex:")) {
@@ -160,6 +162,7 @@ export function carrierEstimate(t: Tracker, timeZone: string): Estimate | null {
 }
 async function refreshFedex(id: string) {
   const { shipment: s, row } = await shipment(id);
+  if (row.plan !== "paid") return;
   if (s.isDemo || s.dismissedAt || s.archivedAt || !s.trackingNumber) return;
   try {
     const result = await fetchFedex(s.trackingNumber, row.time_zone);
@@ -200,12 +203,13 @@ export async function applyTracker(
   await transaction(async (c) => {
     const [s] = (
       await c.query(
-        "SELECT s.*,h.time_zone FROM shipments s JOIN households h ON h.id=s.household_id WHERE s.id=$1 FOR UPDATE OF s",
+        "SELECT s.*,h.time_zone,h.plan FROM shipments s JOIN households h ON h.id=s.household_id WHERE s.id=$1 FOR UPDATE OF s",
         [id],
       )
     ).rows;
     if (
       !s ||
+      s.plan !== "paid" ||
       s.is_demo ||
       s.dismissed_at ||
       s.archived_at ||
@@ -335,7 +339,7 @@ export async function trackingWebhook(data: unknown) {
   if (payload.description !== "tracker.updated") return;
   const tracker = trackerSchema.parse(payload.result);
   const found = await query(
-    "SELECT id,household_id FROM shipments WHERE tracker_id=$1 AND is_demo=false",
+    "SELECT s.id,s.household_id FROM shipments s JOIN households h ON h.id=s.household_id WHERE s.tracker_id=$1 AND s.is_demo=false AND h.plan='paid'",
     [tracker.id],
   );
   for (const s of found)

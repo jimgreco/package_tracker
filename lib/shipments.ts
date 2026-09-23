@@ -70,7 +70,7 @@ export async function shipments(
 }
 export async function shipment(id: string, householdId?: string) {
   const rows = await query(
-    "SELECT s.*,o.merchant,o.order_number,o.ordered_at,h.time_zone FROM shipments s JOIN orders o ON o.id=s.order_id JOIN households h ON h.id=s.household_id WHERE s.id=$1" +
+    "SELECT s.*,o.merchant,o.order_number,o.ordered_at,h.time_zone,h.plan FROM shipments s JOIN orders o ON o.id=s.order_id JOIN households h ON h.id=s.household_id WHERE s.id=$1" +
       (householdId ? " AND s.household_id=$2" : ""),
     householdId ? [id, householdId] : [id],
   );
@@ -108,6 +108,13 @@ export async function settings(ctx: Context): Promise<Settings> {
     [ctx.householdId],
   );
   return {
+    plan: ctx.plan,
+    isAdmin: !!(
+      await query(
+        "SELECT 1 FROM users WHERE id=$1 AND platform_admin=true AND google_subject IS NOT NULL",
+        [ctx.userId],
+      )
+    )[0],
     householdName: ctx.householdName,
     timeZone: ctx.timeZone,
     forwardingAddress:
@@ -124,7 +131,7 @@ export async function settings(ctx: Context): Promise<Settings> {
       google:
         !!process.env.GOOGLE_CLIENT_ID && !!process.env.GOOGLE_CLIENT_SECRET,
       storage: !!process.env.S3_BUCKET,
-      gmail: gmailAvailable(ctx),
+      gmail: ctx.plan === "paid" && gmailAvailable(ctx),
     },
     google: {
       connected: !!g,
@@ -309,6 +316,7 @@ export async function quickShipmentAction(
         c,
       );
       if (
+        ctx.plan === "paid" &&
         action === "restore" &&
         saved.tracking_number &&
         !["delivered", "cancelled", "return_to_sender"].includes(saved.status)
@@ -422,13 +430,12 @@ export async function saveManual(
       existing &&
       (existing.tracking_number !== v.trackingNumber ||
         existing.carrier !== v.carrier);
-    const state = v.trackingNumber
-      ? ctx.demo
-        ? "none"
-        : trackingConfigured(v.carrier)
+    const state =
+      v.trackingNumber && !ctx.demo && ctx.plan === "paid"
+        ? trackingConfigured(v.carrier)
           ? "pending"
           : "unconfigured"
-      : "none";
+        : "none";
     const params = [
       JSON.stringify(v.items),
       v.carrier || null,
@@ -469,7 +476,11 @@ export async function saveManual(
       ],
     );
     if (!ctx.demo) {
-      if (v.trackingNumber && (!existing || trackingChanged))
+      if (
+        ctx.plan === "paid" &&
+        v.trackingNumber &&
+        (!existing || trackingChanged)
+      )
         await enqueue(
           "track_register",
           { shipmentId: saved.id, householdId: ctx.householdId },
