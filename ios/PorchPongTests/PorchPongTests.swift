@@ -23,6 +23,10 @@ final class ModelTests: XCTestCase {
     XCTAssertEqual(PackageFilter.attention.results(shipments).count, 1)
     XCTAssertEqual(PackageFilter.delivered.results(shipments).count, 1)
     XCTAssertEqual(PackageFilter.dismissed.results(shipments).count, 1)
+    var snoozed = shipments[1]
+    snoozed.snoozedAt = "2026-09-19T12:00:00Z"
+    XCTAssertFalse(PackageFilter.all.includes(snoozed))
+    XCTAssertFalse(PackageFilter.onTheWay.includes(snoozed))
     XCTAssertEqual(PackageFilter.all.results(shipments, search: "700100").count, 2)
     XCTAssertEqual(PackageFilter.all.results(shipments, search: "capsules").count, 1)
     var noTracking = shipments[0]

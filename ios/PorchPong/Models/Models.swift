@@ -33,6 +33,7 @@ struct Shipment: Codable, Identifiable, Equatable, Sendable {
   var timelineAt: String
   var firstEmailAt: String?
   var dismissedAt: String?
+  var snoozedAt: String? = nil
   var archivedAt: String?
   var updatedAt: String
   var statusAt: String
@@ -67,7 +68,7 @@ enum PackageFilter: String, CaseIterable, Identifiable {
   func includes(_ s: Shipment) -> Bool {
     guard s.archivedAt == nil else { return false }
     if self == .dismissed { return s.dismissedAt != nil }
-    guard s.dismissedAt == nil else { return false }
+    guard s.dismissedAt == nil && s.snoozedAt == nil else { return false }
     switch self {
     case .all: return true
     case .onTheWay:

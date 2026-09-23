@@ -367,7 +367,7 @@ export async function applyExtraction(emailId: string, input: Extracted) {
              JOIN shipment_emails se ON se.shipment_id=s.id
              JOIN source_emails previous ON previous.id=se.email_id AND previous.household_id=o.household_id
              WHERE o.household_id=$1 AND o.merchant_key=$2
-               AND o.created_at>now()-interval '120 days'
+               AND (o.created_at>now()-interval '120 days' OR s.snoozed_at IS NOT NULL)
                AND s.archived_at IS NULL
                AND jsonb_array_length(previous.extraction->'orders')=1`,
             [e.household_id, merchantKey],
@@ -392,8 +392,8 @@ export async function applyExtraction(emailId: string, input: Extracted) {
           if (!code && !reference) continue;
           const matches = (
             await c.query(
-              "SELECT o.* FROM orders o JOIN shipments s ON s.order_id=o.id WHERE s.household_id=$1 AND (s.tracking_number=$2 OR s.retailer_reference=$4) AND s.created_at>now()-interval '120 days' AND ($3::text IS NULL OR lower(s.carrier)=lower($3) OR s.carrier IS NULL)",
-              [e.household_id, code, s.carrier, reference],
+              "SELECT o.* FROM orders o JOIN shipments s ON s.order_id=o.id WHERE s.household_id=$1 AND (s.tracking_number=$2 OR s.retailer_reference=$4) AND (s.created_at>now()-interval '120 days' OR (s.snoozed_at IS NOT NULL AND o.merchant_key=$5)) AND ($3::text IS NULL OR lower(s.carrier)=lower($3) OR s.carrier IS NULL)",
+              [e.household_id, code, s.carrier, reference, merchantKey],
             )
           ).rows;
           if (matches.length === 1) {
@@ -462,8 +462,8 @@ export async function applyExtraction(emailId: string, input: Extracted) {
           tracking || reference
             ? (
                 await c.query(
-                  "SELECT * FROM shipments WHERE household_id=$1 AND (tracking_number=$2 OR retailer_reference=$4) AND created_at>now()-interval '120 days' AND ($3::text IS NULL OR lower(carrier)=lower($3) OR carrier IS NULL) FOR UPDATE",
-                  [e.household_id, tracking, s.carrier, reference],
+                  "SELECT * FROM shipments WHERE household_id=$1 AND (tracking_number=$2 OR retailer_reference=$4) AND (created_at>now()-interval '120 days' OR (snoozed_at IS NOT NULL AND order_id=$5)) AND ($3::text IS NULL OR lower(carrier)=lower($3) OR carrier IS NULL) FOR UPDATE",
+                  [e.household_id, tracking, s.carrier, reference, order.id],
                 )
               ).rows
             : [];

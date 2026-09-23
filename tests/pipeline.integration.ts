@@ -67,6 +67,7 @@ before(async () => {
     "009_native_sessions.sql",
     "010_delivery_features.sql",
     "011_native_calendar.sql",
+    "012_snoozed.sql",
   ])
     await query(await readFile("db/" + file, "utf8"));
   const [h] = await query(
@@ -1008,6 +1009,73 @@ test("quick actions are household scoped, idempotent, reversible and protect con
     )[0].n,
     1,
   );
+});
+
+test("snoozed packages wake on a new carrier event or source email, not an unchanged poll", async () => {
+  const first = await incoming(
+    "snooze-first",
+    "Test Shop SNOOZEORDER TRACKSNOOZE Trail shoes Your package is on the way.",
+  );
+  const initial = extraction("TRACKSNOOZE");
+  initial.orders[0].orderNumber = "SNOOZEORDER";
+  await applyExtraction(first.id, initial);
+  const s = (await shipments(ctx.householdId)).find(
+    (row) => row.trackingNumber === "TRACKSNOOZE",
+  )!;
+  await assert.rejects(
+    quickShipmentAction(s.id, { ...ctx, householdId: randomUUID() }, "snooze"),
+    /not found/,
+  );
+  await quickShipmentAction(s.id, ctx, "snooze");
+  await quickShipmentAction(s.id, ctx, "snooze");
+  assert.ok((await shipment(s.id)).shipment.snoozedAt);
+  await query("UPDATE shipments SET tracker_id='trk_snooze' WHERE id=$1", [s.id]);
+  const tracker = {
+    id: "trk_snooze",
+    tracking_code: "TRACKSNOOZE",
+    status: "in_transit" as const,
+    updated_at: "2026-09-21T12:00:00Z",
+    tracking_details: [],
+  };
+  await applyTracker(s.id, tracker);
+  assert.ok((await shipment(s.id)).shipment.snoozedAt);
+  const update = {
+    ...tracker,
+    tracking_details: [{
+      datetime: "2026-09-21T12:00:00Z",
+      status: "in_transit",
+      message: "Package processed at carrier facility.",
+    }],
+  };
+  await applyTracker(s.id, update);
+  assert.equal((await shipment(s.id)).shipment.snoozedAt, null);
+  await quickShipmentAction(s.id, ctx, "snooze");
+  await applyTracker(s.id, update);
+  assert.ok((await shipment(s.id)).shipment.snoozedAt);
+  await applyTracker(s.id, {
+    ...tracker,
+    status: "delayed",
+    updated_at: "2026-09-22T12:00:00Z",
+  });
+  assert.equal((await shipment(s.id)).shipment.snoozedAt, null);
+  await quickShipmentAction(s.id, ctx, "snooze");
+  await query(
+    "UPDATE shipments SET created_at=now()-interval '180 days' WHERE id=$1",
+    [s.id],
+  );
+  const later = await incoming(
+    "snooze-later",
+    "Test Shop SNOOZEORDER TRACKSNOOZE Trail shoes Your package is on the way.",
+  );
+  await applyExtraction(later.id, initial);
+  assert.equal((await shipment(s.id)).shipment.snoozedAt, null);
+  assert.equal(
+    (await query("SELECT count(*)::int n FROM shipments WHERE tracking_number='TRACKSNOOZE'"))[0].n,
+    1,
+  );
+  await quickShipmentAction(s.id, ctx, "snooze");
+  await quickShipmentAction(s.id, ctx, "unsnooze");
+  assert.equal((await shipment(s.id)).shipment.snoozedAt, null);
 });
 
 async function directFedexShipment(key: string) {

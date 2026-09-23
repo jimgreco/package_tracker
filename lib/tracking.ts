@@ -220,6 +220,7 @@ export async function applyTracker(
     const history = [...tracker.tracking_details]
       .filter((d) => Number.isFinite(Date.parse(d.datetime)))
       .sort((a, b) => Date.parse(a.datetime) - Date.parse(b.datetime));
+    let newEvent = false;
     for (const d of history) {
       const message = d.message || d.description || d.status;
       const loc =
@@ -230,7 +231,7 @@ export async function applyTracker(
         ]
           .filter(Boolean)
           .join(", ") || null;
-      await c.query(
+      const inserted = await c.query(
         `INSERT INTO tracking_events(shipment_id,event_key,status,message,location,occurred_at,source) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
         [
           id,
@@ -242,13 +243,14 @@ export async function applyTracker(
           d.source || tracker.carrier || "Carrier",
         ],
       );
+      newEvent ||= !!inserted.rowCount;
     }
     const last = history.at(-1);
     const at = last?.datetime || tracker.updated_at;
     if (!at || !Number.isFinite(Date.parse(at))) {
       await c.query(
-        "UPDATE shipments SET last_checked_at=now(),tracking_state='active',tracking_error=NULL WHERE id=$1",
-        [id],
+        "UPDATE shipments SET last_checked_at=now(),tracking_state='active',tracking_error=NULL,snoozed_at=CASE WHEN $2 THEN NULL ELSE snoozed_at END,updated_at=CASE WHEN $2 AND snoozed_at IS NOT NULL THEN now() ELSE updated_at END WHERE id=$1",
+        [id, newEvent],
       );
       return;
     }
@@ -302,7 +304,7 @@ export async function applyTracker(
       (canEstimate && !isDeepStrictEqual(s.estimate, merged));
     const [saved] = (
       await c.query(
-        `UPDATE shipments SET status=CASE WHEN $2 THEN $3 ELSE status END,status_at=CASE WHEN $2 THEN $4::timestamptz ELSE status_at END,delivered_at=CASE WHEN $2 AND $3='delivered' THEN coalesce($5,delivered_at) ELSE delivered_at END,estimate=CASE WHEN $6 THEN $7::jsonb ELSE estimate END,estimate_at=CASE WHEN $6 THEN $8::timestamptz ELSE estimate_at END,last_checked_at=now(),tracking_state='active',tracking_error=NULL,version=version+CASE WHEN $9 THEN 1 ELSE 0 END,updated_at=CASE WHEN $9 THEN now() ELSE updated_at END WHERE id=$1 RETURNING *`,
+        `UPDATE shipments SET status=CASE WHEN $2 THEN $3 ELSE status END,status_at=CASE WHEN $2 THEN $4::timestamptz ELSE status_at END,delivered_at=CASE WHEN $2 AND $3='delivered' THEN coalesce($5,delivered_at) ELSE delivered_at END,estimate=CASE WHEN $6 THEN $7::jsonb ELSE estimate END,estimate_at=CASE WHEN $6 THEN $8::timestamptz ELSE estimate_at END,last_checked_at=now(),tracking_state='active',tracking_error=NULL,snoozed_at=CASE WHEN $10 THEN NULL ELSE snoozed_at END,version=version+CASE WHEN $9 THEN 1 ELSE 0 END,updated_at=CASE WHEN $9 OR ($10 AND snoozed_at IS NOT NULL) THEN now() ELSE updated_at END WHERE id=$1 RETURNING *`,
         [
           id,
           canUpdate,
@@ -313,6 +315,7 @@ export async function applyTracker(
           JSON.stringify(merged),
           estimateAt,
           !!changed,
+          !!changed || newEvent,
         ],
       )
     ).rows;

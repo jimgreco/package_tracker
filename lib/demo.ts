@@ -118,6 +118,7 @@ export function demoShipments(): Shipment[] {
     timelineAt: iso(r.shipped),
     firstEmailAt: null,
     dismissedAt: null,
+    snoozedAt: null,
     archivedAt: null,
     updatedAt: iso(0),
     statusAt: iso(r.status === "delivered" ? r.eta! : 0),

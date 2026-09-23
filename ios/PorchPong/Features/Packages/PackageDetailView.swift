@@ -98,6 +98,14 @@ struct PackageDetailView: View {
               await load()
             }
           }.disabled(!store.canWrite)
+          if s.dismissedAt == nil {
+            Button(s.snoozedAt == nil ? "Snooze until next update" : "Show package now") {
+              Task {
+                await store.action(s, s.snoozedAt == nil ? "snooze" : "unsnooze")
+                await load()
+              }
+            }.disabled(!store.canWrite)
+          }
           Button("Edit details") { editing = true }.disabled(!store.canWrite)
           Button("Merge duplicate entries") { merging = true }.disabled(
             !store.canWrite || store.shipments.count < 2)

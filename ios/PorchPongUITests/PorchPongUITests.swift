@@ -171,6 +171,25 @@ import XCTest
     undo.tap()
     screenshot("dismiss-restored")
   }
+  func testSnoozedSectionAndShowNow() {
+    launch()
+    XCTAssertTrue(app.staticTexts["Schoolhouse"].waitForExistence(timeout: 5))
+    app.staticTexts["Schoolhouse"].tap()
+    let snooze = app.buttons["Snooze until next update"]
+    reveal(snooze)
+    XCTAssertTrue(snooze.isHittable)
+    snooze.tap()
+    reveal(app.buttons["Show package now"])
+    XCTAssertTrue(app.buttons["Show package now"].waitForExistence(timeout: 5))
+    app.navigationBars["Package"].buttons["Packages"].tap()
+    reveal(app.staticTexts["Snoozed"])
+    XCTAssertTrue(app.staticTexts["Snoozed"].exists)
+    screenshot("snoozed-packages")
+    app.staticTexts["Schoolhouse"].tap()
+    reveal(app.buttons["Show package now"])
+    app.buttons["Show package now"].tap()
+    XCTAssertTrue(app.buttons["Snooze until next update"].waitForExistence(timeout: 5))
+  }
   func testCreateValidationAndSave() {
     launch()
     XCTAssertTrue(app.buttons["addPackage"].waitForExistence(timeout: 5))

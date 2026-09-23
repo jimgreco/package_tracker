@@ -36,6 +36,7 @@ export function mapShipment(r: Record<string, unknown>): Shipment {
     timelineAt: iso(r.timeline_at || r.created_at)!,
     firstEmailAt: iso(r.first_email_at),
     dismissedAt: iso(r.dismissed_at),
+    snoozedAt: iso(r.snoozed_at),
     archivedAt: iso(r.archived_at),
     updatedAt: iso(r.updated_at)!,
     statusAt: iso(r.status_at)!,
@@ -210,7 +211,14 @@ export async function detail(id: string, ctx: Context) {
 export async function quickShipmentAction(
   id: string,
   ctx: Context,
-  action: "deliver" | "dismiss" | "restore" | "collect" | "uncollect",
+  action:
+    | "deliver"
+    | "dismiss"
+    | "restore"
+    | "collect"
+    | "uncollect"
+    | "snooze"
+    | "unsnooze",
 ) {
   return transaction(async (c) => {
     await c.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
@@ -223,6 +231,16 @@ export async function quickShipmentAction(
       )
     ).rows;
     if (!existing) throw new AppError("Package not found.", 404);
+    if (action === "snooze" || action === "unsnooze") {
+      if (existing.dismissed_at)
+        throw new AppError("Restore this package before snoozing it.");
+      if ((action === "snooze") === !!existing.snoozed_at) return;
+      await c.query(
+        `UPDATE shipments SET snoozed_at=${action === "snooze" ? "now()" : "NULL"},updated_at=now() WHERE id=$1`,
+        [id],
+      );
+      return;
+    }
     if (action === "collect" || action === "uncollect") {
       if (existing.status !== "delivered" || existing.dismissed_at)
         throw new AppError(
@@ -265,7 +283,7 @@ export async function quickShipmentAction(
       await c.query(
         action === "deliver"
           ? "UPDATE shipments SET status='delivered',status_at=now(),manual_override=true,updated_at=now(),version=version+1 WHERE id=$1 RETURNING *"
-          : `UPDATE shipments SET dismissed_at=${action === "dismiss" ? "now()" : "NULL"},updated_at=now(),version=version+1 WHERE id=$1 RETURNING *`,
+          : `UPDATE shipments SET dismissed_at=${action === "dismiss" ? "now()" : "NULL"},snoozed_at=NULL,updated_at=now(),version=version+1 WHERE id=$1 RETURNING *`,
         [id],
       )
     ).rows;

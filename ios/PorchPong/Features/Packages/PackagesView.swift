@@ -31,7 +31,8 @@ struct PackagesView: View {
             .foregroundStyle(.secondary)
         }
         let today = store.shipments.filter {
-          Dates.arrivingToday($0, zone: store.timeZone, now: store.now())
+          $0.snoozedAt == nil && $0.dismissedAt == nil
+            && Dates.arrivingToday($0, zone: store.timeZone, now: store.now())
         }.count
         if today > 0 {
           Label(
@@ -46,7 +47,10 @@ struct PackagesView: View {
             search.isEmpty ? "No packages here" : "No matching packages",
             systemImage: "shippingbox",
             description: Text(
-              store.loading ? "Loading your household…" : "Try another filter or add a package."))
+              store.loading ? "Loading your household…"
+                : store.shipments.contains(where: { $0.snoozedAt != nil })
+                  ? "Check Snoozed below or try another filter."
+                  : "Try another filter or add a package."))
         }
         ForEach(rows) { shipment in
           NavigationLink {
@@ -59,6 +63,8 @@ struct PackagesView: View {
               Button("Restore") { Task { await store.action(shipment, "restore") } }.tint(.porchPong)
                 .disabled(!store.canWrite)
             } else {
+              Button("Snooze") { Task { await store.action(shipment, "snooze") } }
+                .tint(.indigo).disabled(!store.canWrite)
               Button("Dismiss", role: .destructive) {
                 Task { await store.action(shipment, "dismiss") }
               }.disabled(!store.canWrite)
@@ -75,6 +81,31 @@ struct PackagesView: View {
               Button("Mark delivered") { Task { await store.action(shipment, "deliver") } }.tint(
                 .green
               ).disabled(!store.canWrite)
+            }
+          }
+        }
+      }
+      let snoozed = store.shipments.filter { shipment in
+        shipment.archivedAt == nil && shipment.dismissedAt == nil && shipment.snoozedAt != nil
+          && (search.isEmpty
+            || [shipment.merchant, shipment.summary, shipment.orderNumber ?? "",
+                shipment.trackingNumber ?? ""].contains {
+              $0.localizedCaseInsensitiveContains(search)
+            })
+      }
+      if !snoozed.isEmpty {
+        Section("Snoozed") {
+          Text("Hidden from the main list until a new email or tracking update arrives.")
+            .font(.footnote).foregroundStyle(.secondary)
+          ForEach(snoozed) { shipment in
+            NavigationLink {
+              PackageDetailView(id: shipment.id)
+            } label: {
+              PackageRow(shipment: shipment)
+            }
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+              Button("Show now") { Task { await store.action(shipment, "unsnooze") } }
+                .tint(.porchPong).disabled(!store.canWrite)
             }
           }
         }

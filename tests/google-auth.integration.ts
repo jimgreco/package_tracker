@@ -49,6 +49,7 @@ before(async () => {
     "009_native_sessions.sql",
     "010_delivery_features.sql",
     "011_native_calendar.sql",
+    "012_snoozed.sql",
   ])
     await query(await readFile("db/" + file, "utf8"));
   keys = await generateKeyPair("RS256");

@@ -397,7 +397,7 @@ async function handle(
         return json({ id: await saveManual(await jsonBody(req), ctx, id) });
       if (
         path.length === 3 &&
-        ["deliver", "dismiss", "restore", "collect", "uncollect"].includes(
+        ["deliver", "dismiss", "restore", "collect", "uncollect", "snooze", "unsnooze"].includes(
           path[2],
         ) &&
         method === "POST"
@@ -406,7 +406,7 @@ async function handle(
           id,
           ctx,
           z
-            .enum(["deliver", "dismiss", "restore", "collect", "uncollect"])
+            .enum(["deliver", "dismiss", "restore", "collect", "uncollect", "snooze", "unsnooze"])
             .parse(path[2]),
         );
         return json({ ok: true });

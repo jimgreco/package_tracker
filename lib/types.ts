@@ -54,6 +54,7 @@ export type Shipment = {
   timelineAt: string;
   firstEmailAt: string | null;
   dismissedAt: string | null;
+  snoozedAt: string | null;
   archivedAt: string | null;
   updatedAt: string;
   statusAt: string;

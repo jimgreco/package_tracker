@@ -2545,6 +2545,43 @@ footer {
   font-size: 12px;
   margin: -4px 0 14px;
 }
+.snoozed-section {
+  margin-top: 36px;
+}
+.snoozed-list {
+  display: grid;
+  gap: 8px;
+}
+.snoozed-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+.snoozed-row > button:first-child {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  padding: 4px 0;
+  text-align: left;
+  border: 0;
+  background: none;
+  color: inherit;
+}
+.snoozed-row span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.snoozed-row > .subtle-button {
+  flex-shrink: 0;
+}
 .shipment-entry {
   min-width: 0;
 }

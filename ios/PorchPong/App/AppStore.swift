@@ -246,6 +246,10 @@ import Observation
       } else if action == "restore" {
         undoDismissal = nil
         message = "Package restored."
+      } else if action == "snooze" {
+        message = "Snoozed until the next email or tracking update."
+      } else if action == "unsnooze" {
+        message = "Package is back in your main list."
       } else if action == "collect" {
         message = "Package marked collected."
       } else if action == "uncollect" {

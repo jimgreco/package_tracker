@@ -160,6 +160,8 @@
         if parts.count == 3, let index = value.shipments.firstIndex(where: { $0.id == parts[1] }) {
           if parts[2] == "dismiss" { value.shipments[index].dismissedAt = "2026-09-19T16:00:00Z" }
           if parts[2] == "restore" { value.shipments[index].dismissedAt = nil }
+          if parts[2] == "snooze" { value.shipments[index].snoozedAt = "2026-09-19T16:00:00Z" }
+          if parts[2] == "unsnooze" { value.shipments[index].snoozedAt = nil }
           if parts[2] == "collect" {
             value.shipments[index].collectedAt = "2026-09-19T16:00:00Z"
             value.shipments[index].collectedByName = "Sample member"

@@ -195,10 +195,26 @@ export default function Page() {
     setAuth(true);
   }
   const today = data ? todayInZone(data.settings.timeZone) : "";
-  const all = (data?.shipments || []).filter((s) => !s.dismissedAt);
+  const undismissed = (data?.shipments || []).filter((s) => !s.dismissedAt);
+  const all = undismissed.filter((s) => !s.snoozedAt);
+  const snoozed = undismissed.filter((s) => s.snoozedAt);
+  const matchesSearch = (s: Shipment) =>
+    [s.merchant, s.orderNumber, s.trackingNumber, ...s.items.map((i) => i.name)]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(search.toLowerCase());
+  const visibleSnoozed = snoozed.filter(matchesSearch);
   async function quickAction(
     s: Shipment,
-    kind: "deliver" | "dismiss" | "restore" | "collect" | "uncollect",
+    kind:
+      | "deliver"
+      | "dismiss"
+      | "restore"
+      | "collect"
+      | "uncollect"
+      | "snooze"
+      | "unsnooze",
   ) {
     await action(`package:${s.id}`, async () => {
       await api(`shipments/${s.id}/${kind}`, {});
@@ -213,7 +229,11 @@ export default function Page() {
               ? "Marked delivered. You can set the delivery date in Edit details."
               : kind === "dismiss"
                 ? "Package dismissed. Restore it from Dismissed anytime."
-                : "Package restored.",
+                : kind === "snooze"
+                  ? "Package snoozed until its next email or tracking update."
+                  : kind === "unsnooze"
+                    ? "Package is back in your main list."
+                    : "Package restored.",
       );
     });
   }
@@ -245,16 +265,7 @@ export default function Page() {
           : filter === "Delivered"
             ? s.status === "delivered"
             : (s.attentionReasons?.length ?? 0) > 0)) &&
-      [
-        s.merchant,
-        s.orderNumber,
-        s.trackingNumber,
-        ...s.items.map((i) => i.name),
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(search.toLowerCase()),
+      matchesSearch(s),
   );
   const upcoming = all
     .filter(
@@ -593,6 +604,13 @@ export default function Page() {
                                       <button
                                         className="subtle-button"
                                         disabled={busy === `package:${s.id}`}
+                                        onClick={() => quickAction(s, "snooze")}
+                                      >
+                                        Snooze
+                                      </button>
+                                      <button
+                                        className="subtle-button"
+                                        disabled={busy === `package:${s.id}`}
                                         onClick={() =>
                                           quickAction(s, "dismiss")
                                         }
@@ -610,7 +628,7 @@ export default function Page() {
                       ) : (
                         <Empty
                           title={
-                            all.length
+                            all.length || snoozed.length
                               ? "Nothing here just yet"
                               : "Your doorstep is clear"
                           }
@@ -625,7 +643,7 @@ export default function Page() {
                               >
                                 Show all packages
                               </button>
-                            ) : (
+                            ) : snoozed.length ? null : (
                               <button
                                 className="primary"
                                 onClick={() => setForm("new")}
@@ -638,7 +656,9 @@ export default function Page() {
                         >
                           {all.length
                             ? "Try a different filter or search."
-                            : "Forward a shipping email or add your first package to get started."}
+                            : snoozed.length
+                              ? "Your packages are in Snoozed below."
+                              : "Forward a shipping email or add your first package to get started."}
                         </Empty>
                       )}
                     </section>
@@ -783,10 +803,51 @@ export default function Page() {
                       </section>
                     </aside>
                   </div>
+                  {snoozed.length > 0 && (
+                    <section
+                      className="snoozed-section"
+                      aria-label="Snoozed packages"
+                    >
+                      <div className="list-label">
+                        SNOOZED{" "}
+                        <span>
+                          {snoozed.length}{" "}
+                          {snoozed.length === 1 ? "package" : "packages"}
+                        </span>
+                      </div>
+                      <p className="sort-explanation">
+                        Hidden from the main list until a new email or tracking
+                        update arrives.
+                      </p>
+                      <div className="snoozed-list">
+                        {visibleSnoozed.map((s) => (
+                          <div className="snoozed-row" key={s.id}>
+                            <button onClick={() => select(s.id)}>
+                              <strong>{s.merchant}</strong>
+                              <span>
+                                {s.items.map((i) => i.name).join(", ") ||
+                                  STATUS_LABEL[s.status]}
+                              </span>
+                            </button>
+                            <button
+                              className="subtle-button"
+                              disabled={busy === `package:${s.id}`}
+                              onClick={() => quickAction(s, "unsnooze")}
+                            >
+                              Show now
+                            </button>
+                          </div>
+                        ))}
+                        {!visibleSnoozed.length && (
+                          <p>No snoozed packages match your search.</p>
+                        )}
+                      </div>
+                    </section>
+                  )}
                 </>
               ) : view === "calendar" ? (
                 <CalendarView
-                  data={{ ...data, shipments: all }}
+                  data={{ ...data, shipments: undismissed }}
                   select={select}
                   busy={busy === "google"}
                   connect={() =>
@@ -1040,6 +1101,23 @@ export default function Page() {
                   </button>
                 ) : (
                   <>
+                    {detail.shipment.snoozedAt ? (
+                      <button
+                        className="secondary"
+                        disabled={busy === `package:${detail.shipment.id}`}
+                        onClick={() => quickAction(detail.shipment, "unsnooze")}
+                      >
+                        Show package now
+                      </button>
+                    ) : (
+                      <button
+                        className="secondary"
+                        disabled={busy === `package:${detail.shipment.id}`}
+                        onClick={() => quickAction(detail.shipment, "snooze")}
+                      >
+                        Snooze until next update
+                      </button>
+                    )}
                     {detail.shipment.status === "delivered" && (
                       <button
                         className="secondary"
