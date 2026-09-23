@@ -160,14 +160,9 @@ import XCTest
     reveal(app.buttons["Dismiss package"])
     app.buttons["Dismiss package"].tap()
     let undo = app.buttons["Undo dismissal"]
-    // The confirmation is at the top of detail; scroll back to its banner.
-    if !undo.isHittable {
-      for _ in 0..<10 {
-        app.swipeDown()
-        if undo.isHittable { break }
-      }
-    }
-    XCTAssertTrue(undo.exists)
+    XCTAssertTrue(undo.waitForExistence(timeout: 5))
+    XCTAssertTrue(undo.isHittable)
+    screenshot("dismiss-banner")
     undo.tap()
     screenshot("dismiss-restored")
   }
@@ -179,12 +174,20 @@ import XCTest
     reveal(snooze)
     XCTAssertTrue(snooze.isHittable)
     snooze.tap()
+    XCTAssertTrue(
+      app.staticTexts["Snoozed until the next email or tracking update."]
+        .waitForExistence(timeout: 5))
+    screenshot("snooze-banner")
     reveal(app.buttons["Show package now"])
     XCTAssertTrue(app.buttons["Show package now"].waitForExistence(timeout: 5))
     app.navigationBars["Package"].buttons["Packages"].tap()
     reveal(app.staticTexts["Snoozed"])
     XCTAssertTrue(app.staticTexts["Snoozed"].exists)
     screenshot("snoozed-packages")
+    let notification = app.staticTexts["Snoozed until the next email or tracking update."]
+    let expired = XCTNSPredicateExpectation(
+      predicate: NSPredicate(format: "exists == false"), object: notification)
+    XCTAssertEqual(XCTWaiter.wait(for: [expired], timeout: 8), .completed)
     app.staticTexts["Schoolhouse"].tap()
     reveal(app.buttons["Show package now"])
     app.buttons["Show package now"].tap()

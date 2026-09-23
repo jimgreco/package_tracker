@@ -61,6 +61,8 @@ struct RootView: View {
         }.id(store.epoch)
       }
     }
+    .safeAreaInset(edge: .top, spacing: 0) { ActionBannerInset() }
+    .animation(.easeInOut(duration: 0.2), value: store.message)
     .task(id: "\(PushNotifications.shared.destination?.id ?? ""):\(store.session?.userId ?? "")") {
       guard let destination = PushNotifications.shared.destination, store.session != nil else {
         return
@@ -110,7 +112,10 @@ struct RootView: View {
             Button("Done") { notificationPackage = nil }
           }
         }
-      }.environment(store)
+      }
+      .safeAreaInset(edge: .top, spacing: 0) { ActionBannerInset() }
+      .animation(.easeInOut(duration: 0.2), value: store.message)
+      .environment(store)
     }
     .onChange(of: store.session?.userId) { _, _ in
       notificationPackage = nil
@@ -214,11 +219,56 @@ struct ServiceBanner: View {
       Text(error).font(.callout).foregroundStyle(.red)
       Button("Try again") { Task { await store.refresh() } }.disabled(store.loading)
     }
-    if let message = store.message {
-      Text(message).font(.callout)
-      if store.undoDismissal != nil {
-        Button("Undo dismissal") { Task { await store.undo() } }.disabled(!store.canWrite)
+  }
+}
+struct ActionBannerInset: View {
+  @Environment(AppStore.self) private var store
+  var body: some View {
+    if let message = store.message, store.session != nil {
+      ActionBanner(message: message)
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 4)
+        .transition(.move(edge: .top).combined(with: .opacity))
+    }
+  }
+}
+struct ActionBanner: View {
+  @Environment(AppStore.self) private var store
+  let message: String
+  var body: some View {
+    HStack(spacing: 12) {
+      Image(systemName: "checkmark.circle.fill")
+        .font(.title3)
+        .foregroundStyle(Color.porchPong)
+        .accessibilityHidden(true)
+      Text(message).font(.subheadline).fixedSize(horizontal: false, vertical: true)
+      Spacer(minLength: 0)
+      if message == "Package dismissed.", store.undoDismissal != nil {
+        Button("Undo dismissal") { Task { await store.undo() } }
+          .font(.subheadline.weight(.semibold))
+          .disabled(!store.canWrite)
       }
+      Button("Dismiss notification", systemImage: "xmark") {
+        store.message = nil
+      }
+      .labelStyle(.iconOnly)
+      .font(.caption.weight(.semibold))
+      .foregroundStyle(.secondary)
+      .frame(width: 44, height: 44)
+    }
+    .padding(.horizontal, 14)
+    .padding(.vertical, 12)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+    .overlay {
+      RoundedRectangle(cornerRadius: 16).strokeBorder(Color.porchPong.opacity(0.2))
+    }
+    .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+    .accessibilityIdentifier("serviceBanner")
+    .task(id: message) {
+      do { try await Task.sleep(for: .seconds(6)) } catch { return }
+      if store.message == message { store.message = nil }
     }
   }
 }
