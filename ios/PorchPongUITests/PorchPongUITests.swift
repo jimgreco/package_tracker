@@ -128,6 +128,32 @@ import XCTest
     XCTAssertTrue(app.textFields["merchantField"].waitForExistence(timeout: 3))
     screenshot("edit-details")
   }
+  func testPackagesCalendarSwitchAndDates() {
+    launch()
+    XCTAssertTrue(app.buttons["packageFilter"].waitForExistence(timeout: 5))
+    let view = app.segmentedControls["packageView"]
+    XCTAssertTrue(view.waitForExistence(timeout: 5))
+    view.buttons["Calendar"].tap()
+    XCTAssertTrue(app.staticTexts["September 2026"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Schoolhouse"].exists)
+    XCTAssertFalse(app.staticTexts["Muji"].exists)
+    screenshot("packages-calendar")
+    app.staticTexts["Schoolhouse"].tap()
+    XCTAssertTrue(app.buttons["Copy order number"].waitForExistence(timeout: 5))
+    app.navigationBars["Package"].buttons["Packages"].tap()
+    app.buttons["calendarDay-2026-09-18"].tap()
+    XCTAssertTrue(app.staticTexts["Cometeer"].waitForExistence(timeout: 5))
+    app.buttons["calendarNextMonth"].tap()
+    XCTAssertTrue(app.staticTexts["October 2026"].waitForExistence(timeout: 5))
+    app.buttons["calendarToday"].tap()
+    XCTAssertTrue(app.staticTexts["Schoolhouse"].waitForExistence(timeout: 5))
+    app.buttons["addPackage"].tap()
+    XCTAssertTrue(app.buttons["savePackage"].waitForExistence(timeout: 5))
+    app.buttons["Cancel"].tap()
+    view.buttons["List"].tap()
+    XCTAssertTrue(app.buttons["packageFilter"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Schoolhouse"].exists)
+  }
   func testMarkDeliveredAndEdit() {
     launch()
     XCTAssertTrue(app.staticTexts["Schoolhouse"].waitForExistence(timeout: 5))

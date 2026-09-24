@@ -14,6 +14,8 @@
 		2AB70934C9F393293425150C /* PorchPongApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C883EA9ACABA9A7F19960C5B /* PorchPongApp.swift */; };
 		43CBB106E892171C41C49D81 /* PrivacyShield.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92A026689640972B8846EEB4 /* PrivacyShield.swift */; };
 		4807DDFD09743BFD600D984D /* Dates.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0357EC0651E5CAC5FF9E554 /* Dates.swift */; };
+		4A1D3F7156BC47E68F9D2301 /* PackageCalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1D3F7156BC47E68F9D2302 /* PackageCalendarView.swift */; };
+		4A1D3F7156BC47E68F9D2303 /* DeliveryCalendar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1D3F7156BC47E68F9D2304 /* DeliveryCalendar.swift */; };
 		59E823E0B5134426B7CCBBA2 /* PackageForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = FADD281A8956344A1632A44F /* PackageForm.swift */; };
 		7126BD89E30A3A6B68A4483F /* PorchPongUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68EA940371B49CD66A752E0B /* PorchPongUITests.swift */; };
 		780FE4E5008284F97D3946B1 /* GoogleSignIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F3FD3D80936FC4B66C6015 /* GoogleSignIn.swift */; };
@@ -59,6 +61,8 @@
 		39EDB68D2E87EAC3CB8432DC /* PackagesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackagesView.swift; sourceTree = "<group>"; };
 		3ED56919219F265CA310A329 /* NetworkingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkingTests.swift; sourceTree = "<group>"; };
 		43D464841728EBFAD42E0CBB /* PorchPongTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PorchPongTests.swift; sourceTree = "<group>"; };
+		4A1D3F7156BC47E68F9D2302 /* PackageCalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackageCalendarView.swift; sourceTree = "<group>"; };
+		4A1D3F7156BC47E68F9D2304 /* DeliveryCalendar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryCalendar.swift; sourceTree = "<group>"; };
 		5657D1CCD66D7879654221A3 /* PorchPong.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = PorchPong.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5DF2C5A966E136CD884F9EE1 /* PorchPongTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PorchPongTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		61B22C7631A1733967EDAC54 /* InboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxView.swift; sourceTree = "<group>"; };
@@ -103,6 +107,7 @@
 			isa = PBXGroup;
 			children = (
 				775BD3C350852A8599824FFA /* PackageDetailView.swift */,
+				4A1D3F7156BC47E68F9D2302 /* PackageCalendarView.swift */,
 				FADD281A8956344A1632A44F /* PackageForm.swift */,
 				39EDB68D2E87EAC3CB8432DC /* PackagesView.swift */,
 			);
@@ -150,6 +155,7 @@
 			isa = PBXGroup;
 			children = (
 				F0357EC0651E5CAC5FF9E554 /* Dates.swift */,
+				4A1D3F7156BC47E68F9D2304 /* DeliveryCalendar.swift */,
 				C46D47423641BC3DDF5C6677 /* Models.swift */,
 			);
 			path = Models;
@@ -363,6 +369,7 @@
 				0D6DC58BA3BCFCA3D8014F64 /* APIClient.swift in Sources */,
 				8ADFF810AEA55CCD2AEB8FBE /* AppStore.swift in Sources */,
 				4807DDFD09743BFD600D984D /* Dates.swift in Sources */,
+				4A1D3F7156BC47E68F9D2303 /* DeliveryCalendar.swift in Sources */,
 				2AB70934C9F393293425150C /* PorchPongApp.swift in Sources */,
 				9F68E8B5DE305C669CBCA071 /* Fixture.swift in Sources */,
 				975F683EBA3255A6050504BC /* GoogleCalendarConnection.swift in Sources */,
@@ -371,6 +378,7 @@
 				D26AC2BDF949FF2495056C56 /* Keychain.swift in Sources */,
 				EE7B669ABE850192BC47A940 /* Models.swift in Sources */,
 				1B61545F4942B3487A18F73C /* PackageCache.swift in Sources */,
+				4A1D3F7156BC47E68F9D2301 /* PackageCalendarView.swift in Sources */,
 				7C382FB22589F6CC39E205EE /* PackageDetailView.swift in Sources */,
 				59E823E0B5134426B7CCBBA2 /* PackageForm.swift in Sources */,
 				C2BBBADEC602EC8167755C5A /* PackagesView.swift in Sources */,

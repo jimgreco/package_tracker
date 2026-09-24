@@ -72,6 +72,36 @@ final class ModelTests: XCTestCase {
       kind: "date_range", start: "2026-09-18", end: "2026-09-19", timeZone: "America/New_York")
     XCTAssertTrue(Dates.arrivingToday(s, zone: "America/New_York", now: now))
   }
+  func testDeliveryCalendarDatesAndVisibility() {
+    let zone = "America/New_York"
+    let dashboard = Fixture.dashboard()
+    let moving = dashboard.shipments[0]
+    let delivered = dashboard.shipments[1]
+    XCTAssertEqual(DeliveryCalendar.today(zone: zone, now: Fixture.clock), "2026-09-19")
+    XCTAssertEqual(DeliveryCalendar.moveMonth("2026-12", by: 1), "2027-01")
+    XCTAssertEqual(DeliveryCalendar.days(in: "2026-09").first, "2026-08-31")
+    XCTAssertEqual(DeliveryCalendar.days(in: "2026-09").last, "2026-10-04")
+    XCTAssertTrue(DeliveryCalendar.includes(moving, on: "2026-09-19", householdZone: zone))
+    XCTAssertFalse(DeliveryCalendar.includes(moving, on: "2026-09-20", householdZone: zone))
+    XCTAssertTrue(DeliveryCalendar.includes(delivered, on: "2026-09-18", householdZone: zone))
+    XCTAssertFalse(DeliveryCalendar.includes(delivered, on: "2026-09-19", householdZone: zone))
+    var range = moving
+    range.estimate = Estimate(
+      kind: "date_range", start: "2026-09-19", end: "2026-09-21", timeZone: zone)
+    XCTAssertTrue(DeliveryCalendar.includes(range, on: "2026-09-21", householdZone: zone))
+    XCTAssertFalse(DeliveryCalendar.includes(range, on: "2026-09-22", householdZone: zone))
+    range.estimate?.end = "2026-10-02"
+    XCTAssertTrue(DeliveryCalendar.includes(range, on: "2026-10-01", householdZone: zone))
+    range.snoozedAt = "2026-09-19T16:00:00Z"
+    XCTAssertTrue(DeliveryCalendar.includes(range, on: "2026-09-20", householdZone: zone))
+    range.dismissedAt = "2026-09-19T16:00:00Z"
+    XCTAssertFalse(DeliveryCalendar.includes(range, on: "2026-09-20", householdZone: zone))
+    var absolute = moving
+    absolute.estimate = Estimate(
+      kind: "point", start: "2026-09-20T01:00:00Z", timeZone: zone)
+    XCTAssertTrue(DeliveryCalendar.includes(absolute, on: "2026-09-19", householdZone: zone))
+    XCTAssertFalse(DeliveryCalendar.includes(dashboard.shipments[2], on: "2026-09-19", householdZone: zone))
+  }
   func testManualPayloadPreservesNullsAndOverride() throws {
     var source = Fixture.shipment()
     source.manualOverride = true

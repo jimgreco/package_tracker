@@ -1,11 +1,46 @@
 import SwiftUI
 
+private enum PackageDisplay: String, CaseIterable {
+  case list = "List"
+  case calendar = "Calendar"
+}
+
 struct PackagesView: View {
   @Environment(AppStore.self) private var store
+  @State private var display = PackageDisplay.list
   @State private var filter = PackageFilter.onTheWay
   @State private var search = ""
   @State private var adding = false
   var body: some View {
+    VStack(spacing: 0) {
+      Picker("Package view", selection: $display) {
+        ForEach(PackageDisplay.allCases, id: \.self) { option in
+          Text(option.rawValue).tag(option)
+        }
+      }
+      .pickerStyle(.segmented)
+      .accessibilityIdentifier("packageView")
+      .padding(.horizontal, 16)
+      .padding(.vertical, 10)
+      if display == .list {
+        packageList
+      } else {
+        PackageCalendarView()
+      }
+    }
+    .background(Color.canvas)
+    .navigationTitle("Packages")
+    .toolbar {
+      ToolbarItem(placement: .topBarTrailing) {
+        Button("Add package", systemImage: "plus") { adding = true }.disabled(!store.canWrite)
+          .accessibilityIdentifier("addPackage")
+      }
+    }
+    .sheet(isPresented: $adding) { PackageForm() }
+    .overlay { if store.loading && store.shipments.isEmpty { ProgressView("Loading packages") } }
+  }
+
+  private var packageList: some View {
     List {
       Section {
         ServiceBanner()
@@ -112,18 +147,10 @@ struct PackagesView: View {
       }
     }
     .scrollContentBackground(.hidden).background(Color.canvas)
-    .navigationTitle("Packages").searchable(
+    .searchable(
       text: $search, prompt: "Merchant, item, order or tracking"
     )
     .refreshable { await store.refresh() }
-    .toolbar {
-      ToolbarItem(placement: .topBarTrailing) {
-        Button("Add package", systemImage: "plus") { adding = true }.disabled(!store.canWrite)
-          .accessibilityIdentifier("addPackage")
-      }
-    }
-    .sheet(isPresented: $adding) { PackageForm() }
-    .overlay { if store.loading && store.shipments.isEmpty { ProgressView("Loading packages") } }
   }
 }
 struct PackageRow: View {
