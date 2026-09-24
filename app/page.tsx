@@ -21,6 +21,7 @@ import {
   Inbox,
   Merge,
   ChevronLeft,
+  List,
 } from "lucide-react";
 import type {
   DashboardData,
@@ -311,13 +312,16 @@ export default function Page() {
           {(
             [
               ["packages", Package, "Packages"],
-              ["calendar", CalendarDays, "Calendar"],
               ["inbox", Mail, "Inbox"],
             ] as const
           ).map(([v, Icon, label]) => (
             <button
               key={v}
-              className={view === v ? "active" : ""}
+              className={
+                view === v || (v === "packages" && view === "calendar")
+                  ? "active"
+                  : ""
+              }
               onClick={() => navigate(v)}
             >
               <Icon size={17} />
@@ -379,11 +383,35 @@ export default function Page() {
                   </h1>
                   <p>{headings[view][1]}</p>
                 </div>
-                {view === "packages" && (
-                  <button className="primary" onClick={() => setForm("new")}>
-                    <Plus size={18} />
-                    Add package
-                  </button>
+                {(view === "packages" || view === "calendar") && (
+                  <div className="page-heading-actions">
+                    <div
+                      className="view-switcher"
+                      role="group"
+                      aria-label="Package view"
+                    >
+                      <button
+                        className={view === "packages" ? "selected" : ""}
+                        aria-pressed={view === "packages"}
+                        onClick={() => navigate("packages")}
+                      >
+                        <List size={17} />
+                        List
+                      </button>
+                      <button
+                        className={view === "calendar" ? "selected" : ""}
+                        aria-pressed={view === "calendar"}
+                        onClick={() => navigate("calendar")}
+                      >
+                        <CalendarDays size={17} />
+                        Calendar
+                      </button>
+                    </div>
+                    <button className="primary" onClick={() => setForm("new")}>
+                      <Plus size={18} />
+                      Add package
+                    </button>
+                  </div>
                 )}
               </div>
               {view === "packages" ? (
