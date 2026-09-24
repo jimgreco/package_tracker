@@ -49,6 +49,12 @@ struct Shipment: Codable, Identifiable, Equatable, Sendable {
   var canDeliver: Bool {
     dismissedAt == nil && !["delivered", "cancelled", "return_to_sender"].contains(status)
   }
+  func matchesSearch(_ search: String) -> Bool {
+    search.isEmpty
+      || [merchant, summary, orderNumber ?? "", trackingNumber ?? ""].contains {
+        $0.localizedCaseInsensitiveContains(search)
+      }
+  }
   static func newestFirst(_ lhs: Self, _ rhs: Self) -> Bool {
     let left = Dates.instant(lhs.timelineAt) ?? .distantPast
     let right = Dates.instant(rhs.timelineAt) ?? .distantPast
@@ -82,13 +88,38 @@ enum PackageFilter: String, CaseIterable, Identifiable {
     }
   }
   func results(_ shipments: [Shipment], search: String = "") -> [Shipment] {
-    shipments.filter {
-      includes($0)
-        && (search.isEmpty
-          || [$0.merchant, $0.summary, $0.orderNumber ?? "", $0.trackingNumber ?? ""].contains {
-            $0.localizedCaseInsensitiveContains(search)
-          })
+    shipments.filter { includes($0) && $0.matchesSearch(search) }
+  }
+}
+struct PackageHomeSections {
+  let deliveredToday: [Shipment]
+  let expectedToday: [Shipment]
+  let remaining: [Shipment]
+  let snoozed: [Shipment]
+
+  init(shipments: [Shipment], filter: PackageFilter, search: String, zone: String, now: Date) {
+    let matching = shipments.filter { $0.matchesSearch(search) }
+    snoozed = matching.filter {
+      $0.archivedAt == nil && $0.dismissedAt == nil && $0.snoozedAt != nil
     }
+    if filter == .onTheWay {
+      let today = Dates.formatter("yyyy-MM-dd", zone: zone).string(from: now)
+      deliveredToday = matching.filter {
+        $0.archivedAt == nil && $0.dismissedAt == nil && $0.snoozedAt == nil
+          && $0.status == "delivered"
+          && $0.deliveredAt.flatMap { Dates.instant($0) }.map {
+            Dates.formatter("yyyy-MM-dd", zone: zone).string(from: $0) == today
+          } == true
+      }
+      expectedToday = PackageFilter.onTheWay.results(matching).filter {
+        Dates.arrivingToday($0, zone: zone, now: now)
+      }
+    } else {
+      deliveredToday = []
+      expectedToday = []
+    }
+    let highlighted = Set((deliveredToday + expectedToday).map(\.id))
+    remaining = filter.results(matching).filter { !highlighted.contains($0.id) }
   }
 }
 enum PackageStatus {

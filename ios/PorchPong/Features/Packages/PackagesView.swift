@@ -41,12 +41,20 @@ struct PackagesView: View {
   }
 
   private var packageList: some View {
-    List {
+    let sections = PackageHomeSections(
+      shipments: store.shipments, filter: filter, search: search, zone: store.timeZone,
+      now: store.now())
+    return List {
       Section {
         ServiceBanner()
         VStack(alignment: .leading, spacing: 8) {
           Text(store.householdName).font(.subheadline.weight(.semibold))
-          Text("Newest orders first.").font(.caption).foregroundStyle(.secondary)
+          Text(
+            filter == .onTheWay
+              ? "Today's deliveries first. Other packages are newest first."
+              : "Newest orders first."
+          )
+            .font(.caption).foregroundStyle(.secondary)
           Menu {
             Picker("Package filter", selection: $filter) {
               ForEach(PackageFilter.allCases) { option in
@@ -65,19 +73,23 @@ struct PackagesView: View {
             .font(.footnote)
             .foregroundStyle(.secondary)
         }
-        let today = store.shipments.filter {
-          $0.snoozedAt == nil && $0.dismissedAt == nil
-            && Dates.arrivingToday($0, zone: store.timeZone, now: store.now())
-        }.count
-        if today > 0 {
-          Label(
-            "\(today) \(today == 1 ? "package" : "packages") expected today", systemImage: "sun.max"
-          ).font(.subheadline).foregroundStyle(Color.porchPong)
-        }
       }.listRowBackground(Color.clear)
-      Section {
-        let rows = filter.results(store.shipments, search: search)
-        if rows.isEmpty {
+      if filter == .onTheWay {
+        Section("Delivered today") {
+          if sections.deliveredToday.isEmpty {
+            Text("No packages delivered today.").foregroundStyle(.secondary)
+          }
+          ForEach(sections.deliveredToday) { shipment in packageLink(shipment) }
+        }
+        Section("Expected today") {
+          if sections.expectedToday.isEmpty {
+            Text("No packages expected today.").foregroundStyle(.secondary)
+          }
+          ForEach(sections.expectedToday) { shipment in packageLink(shipment) }
+        }
+      }
+      Section(filter == .onTheWay ? "Other packages" : filter.rawValue) {
+        if sections.remaining.isEmpty {
           ContentUnavailableView(
             search.isEmpty ? "No packages here" : "No matching packages",
             systemImage: "shippingbox",
@@ -87,52 +99,13 @@ struct PackagesView: View {
                   ? "Check Snoozed below or try another filter."
                   : "Try another filter or add a package."))
         }
-        ForEach(rows) { shipment in
-          NavigationLink {
-            PackageDetailView(id: shipment.id)
-          } label: {
-            PackageRow(shipment: shipment)
-          }
-          .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            if shipment.dismissedAt != nil {
-              Button("Restore") { Task { await store.action(shipment, "restore") } }.tint(.porchPong)
-                .disabled(!store.canWrite)
-            } else {
-              Button("Snooze") { Task { await store.action(shipment, "snooze") } }
-                .tint(.indigo).disabled(!store.canWrite)
-              Button("Dismiss", role: .destructive) {
-                Task { await store.action(shipment, "dismiss") }
-              }.disabled(!store.canWrite)
-            }
-          }
-          .swipeActions(edge: .leading, allowsFullSwipe: false) {
-            if shipment.status == "delivered" && shipment.dismissedAt == nil
-              && shipment.collectedAt == nil
-            {
-              Button("Collect") { Task { await store.action(shipment, "collect") } }.tint(.green)
-                .disabled(!store.canWrite)
-            }
-            if shipment.canDeliver {
-              Button("Mark delivered") { Task { await store.action(shipment, "deliver") } }.tint(
-                .green
-              ).disabled(!store.canWrite)
-            }
-          }
-        }
+        ForEach(sections.remaining) { shipment in packageLink(shipment) }
       }
-      let snoozed = store.shipments.filter { shipment in
-        shipment.archivedAt == nil && shipment.dismissedAt == nil && shipment.snoozedAt != nil
-          && (search.isEmpty
-            || [shipment.merchant, shipment.summary, shipment.orderNumber ?? "",
-                shipment.trackingNumber ?? ""].contains {
-              $0.localizedCaseInsensitiveContains(search)
-            })
-      }
-      if !snoozed.isEmpty {
+      if !sections.snoozed.isEmpty {
         Section("Snoozed") {
           Text("Hidden from the main list until a new email or tracking update arrives.")
             .font(.footnote).foregroundStyle(.secondary)
-          ForEach(snoozed) { shipment in
+          ForEach(sections.snoozed) { shipment in
             NavigationLink {
               PackageDetailView(id: shipment.id)
             } label: {
@@ -151,6 +124,39 @@ struct PackagesView: View {
       text: $search, prompt: "Merchant, item, order or tracking"
     )
     .refreshable { await store.refresh() }
+  }
+
+  private func packageLink(_ shipment: Shipment) -> some View {
+    NavigationLink {
+      PackageDetailView(id: shipment.id)
+    } label: {
+      PackageRow(shipment: shipment)
+    }
+    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+      if shipment.dismissedAt != nil {
+        Button("Restore") { Task { await store.action(shipment, "restore") } }.tint(.porchPong)
+          .disabled(!store.canWrite)
+      } else {
+        Button("Snooze") { Task { await store.action(shipment, "snooze") } }
+          .tint(.indigo).disabled(!store.canWrite)
+        Button("Dismiss", role: .destructive) {
+          Task { await store.action(shipment, "dismiss") }
+        }.disabled(!store.canWrite)
+      }
+    }
+    .swipeActions(edge: .leading, allowsFullSwipe: false) {
+      if shipment.status == "delivered" && shipment.dismissedAt == nil
+        && shipment.collectedAt == nil
+      {
+        Button("Collect") { Task { await store.action(shipment, "collect") } }.tint(.green)
+          .disabled(!store.canWrite)
+      }
+      if shipment.canDeliver {
+        Button("Mark delivered") { Task { await store.action(shipment, "deliver") } }.tint(
+          .green
+        ).disabled(!store.canWrite)
+      }
+    }
   }
 }
 struct PackageRow: View {

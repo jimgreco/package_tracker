@@ -70,7 +70,8 @@ packages/search/filter, detail, deliver/dismiss/restore, create/edit validation,
 inbox, settings, large text, and offline/malformed-response recovery.
 
 For synthetic visual inspection only, launch a Debug build with `--fixture`.
-Optional flags: `--offline`, `--malformed`, `--signed-out`. Tests also use
+Optional flags: `--offline`, `--malformed`, `--signed-out`, `--today-sections`.
+Tests also use
 `-UIPreferredContentSizeCategoryName UICTContentSizeCategoryAccessibilityXXXL`.
 These fixtures cannot be activated in Release. Screenshots and result bundles
 stay in ignored `output/ios/`; never publish screenshots of real emails/feed links.

@@ -128,6 +128,26 @@ import XCTest
     XCTAssertTrue(app.textFields["merchantField"].waitForExistence(timeout: 3))
     screenshot("edit-details")
   }
+  func testPackagesHomeSections() {
+    launch(["--today-sections"])
+    let delivered = app.staticTexts["Delivered today"]
+    let expected = app.staticTexts["Expected today"]
+    let other = app.staticTexts["Other packages"]
+    let snoozed = app.staticTexts["Snoozed"]
+    XCTAssertTrue(delivered.waitForExistence(timeout: 5))
+    XCTAssertTrue(expected.exists)
+    XCTAssertLessThan(delivered.frame.minY, expected.frame.minY)
+    XCTAssertTrue(app.staticTexts["Cometeer"].exists)
+    XCTAssertTrue(app.staticTexts["Schoolhouse"].exists)
+    screenshot("packages-today-sections")
+    reveal(other)
+    XCTAssertTrue(other.exists)
+    XCTAssertTrue(app.staticTexts["Muji"].exists)
+    reveal(snoozed)
+    XCTAssertTrue(snoozed.exists)
+    XCTAssertTrue(app.staticTexts["Snoozed parcel"].exists)
+    screenshot("packages-remaining-snoozed")
+  }
   func testPackagesCalendarSwitchAndDates() {
     launch()
     XCTAssertTrue(app.buttons["packageFilter"].waitForExistence(timeout: 5))

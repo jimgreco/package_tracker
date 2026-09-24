@@ -25,7 +25,7 @@
         statusAt: "2026-09-18T15:00:00Z", lastCheckedAt: "2026-09-18T15:00:00Z",
         trackingState: "active", needsReview: false, manualOverride: false, isDemo: false)
     }
-    static func dashboard() -> Dashboard {
+    static func dashboard(todaySections: Bool = false) -> Dashboard {
       var moving = shipment(
         id: "30000000-0000-0000-0000-000000000002", merchant: "Schoolhouse",
         status: "out_for_delivery")
@@ -67,8 +67,19 @@
             userId: user, name: "Sample member", email: "sample@example.test", role: "owner",
             pending: false), Member(email: "pending@example.test", role: "member", pending: true),
         ])
+      var delivered = shipment()
+      var shipments = [moving, delivered, delayed, dismissed]
+      if todaySections {
+        delivered.deliveredAt = "2026-09-19T15:00:00Z"
+        shipments[1] = delivered
+        var snoozed = shipment(
+          id: "30000000-0000-0000-0000-000000000005", merchant: "Snoozed parcel",
+          status: "in_transit")
+        snoozed.snoozedAt = "2026-09-19T16:00:00Z"
+        shipments.append(snoozed)
+      }
       return Dashboard(
-        shipments: [moving, shipment(), delayed, dismissed],
+        shipments: shipments,
         emails: [
           InboxEmail(
             id: "50000000-0000-0000-0000-000000000001", subject: "Your Cometeer delivery arrived",
@@ -104,11 +115,13 @@
     }
     @MainActor static func makeStore() -> AppStore {
       let args = ProcessInfo.processInfo.arguments
+      let todaySections = args.contains("--today-sections")
       let api = FixtureAPI(
-        offline: args.contains("--offline"), malformed: args.contains("--malformed"))
+        offline: args.contains("--offline"), malformed: args.contains("--malformed"),
+        todaySections: todaySections)
       let cache = PackageCache(
         directory: FileManager.default.temporaryDirectory.appendingPathComponent("PorchPongFixture"))
-      let dashboard = dashboard()
+      let dashboard = dashboard(todaySections: todaySections)
       if args.contains("--offline") {
         try? cache.save(
           PackageSnapshot(
@@ -122,14 +135,15 @@
     }
   }
   actor FixtureAPI: PorchPongAPI {
-    var value = Fixture.dashboard()
+    var value: Dashboard
     var offline: Bool
     var malformed: Bool
     var keys: [String: String] = [:]
     var writes = 0
-    init(offline: Bool = false, malformed: Bool = false) {
+    init(offline: Bool = false, malformed: Bool = false, todaySections: Bool = false) {
       self.offline = offline
       self.malformed = malformed
+      value = Fixture.dashboard(todaySections: todaySections)
     }
     func configure(_ session: NativeSession?) {}
     func revoke(_ session: NativeSession) throws {

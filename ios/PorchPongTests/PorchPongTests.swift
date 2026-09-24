@@ -39,6 +39,42 @@ final class ModelTests: XCTestCase {
     updated.archivedAt = "2026-09-19T00:00:00Z"
     XCTAssertFalse(PackageFilter.all.includes(updated))
   }
+  func testPackageHomeSectionsUseHouseholdDayAndKeepRowsDistinct() {
+    let shipments = Fixture.dashboard(todaySections: true).shipments
+    let sections = PackageHomeSections(
+      shipments: shipments, filter: .onTheWay, search: "", zone: "America/New_York",
+      now: Fixture.clock)
+    XCTAssertEqual(sections.deliveredToday.map(\.merchant), ["Cometeer"])
+    XCTAssertEqual(sections.expectedToday.map(\.merchant), ["Schoolhouse"])
+    XCTAssertEqual(sections.remaining.map(\.merchant), ["Muji"])
+    XCTAssertEqual(sections.snoozed.map(\.merchant), ["Snoozed parcel"])
+    XCTAssertEqual(
+      Set((sections.deliveredToday + sections.expectedToday + sections.remaining + sections.snoozed)
+        .map(\.id)).count, 4)
+
+    let searched = PackageHomeSections(
+      shipments: shipments, filter: .onTheWay, search: "Cometeer", zone: "America/New_York",
+      now: Fixture.clock)
+    XCTAssertEqual(searched.deliveredToday.map(\.merchant), ["Cometeer"])
+    XCTAssertTrue(searched.expectedToday.isEmpty)
+    XCTAssertTrue(searched.remaining.isEmpty)
+    let deliveredFilter = PackageHomeSections(
+      shipments: shipments, filter: .delivered, search: "", zone: "America/New_York",
+      now: Fixture.clock)
+    XCTAssertTrue(deliveredFilter.deliveredToday.isEmpty)
+    XCTAssertEqual(deliveredFilter.remaining.map(\.merchant), ["Cometeer"])
+
+    var lateDelivery = shipments[1]
+    lateDelivery.deliveredAt = "2026-09-20T02:00:00Z"
+    let newYork = PackageHomeSections(
+      shipments: [lateDelivery], filter: .onTheWay, search: "", zone: "America/New_York",
+      now: Fixture.clock)
+    let utc = PackageHomeSections(
+      shipments: [lateDelivery], filter: .onTheWay, search: "", zone: "UTC",
+      now: Fixture.clock)
+    XCTAssertEqual(newYork.deliveredToday.count, 1)
+    XCTAssertTrue(utc.deliveredToday.isEmpty)
+  }
   func testDateAndEstimateKindsDestinationZoneAndDST() {
     let now = Fixture.clock
     XCTAssertEqual(Dates.instant("2026-09-19T16:00:00.000Z"), Dates.instant("2026-09-19T16:00:00Z"))
