@@ -35,6 +35,16 @@ printf '%s\n' "SELECT 'CREATE ROLE doorstep_app LOGIN' WHERE NOT EXISTS (SELECT 
   "ALTER ROLE doorstep_app LOGIN PASSWORD '$password';" \
   "SELECT 'CREATE DATABASE doorstep OWNER doorstep_app' WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname='doorstep')\gexec" \
   | docker exec -i shared_db psql -U admin -d postgres -v ON_ERROR_STOP=1 >/dev/null
+# Reclaim only old PorchPong images with no containers before pulling a release.
+# Keep the pinned image even if its containers are temporarily stopped.
+pinned_image=$(awk -F= '$1=="DOORSTEP_IMAGE" { sub(/^[^=]*=/,""); print; exit }' .env)
+running_images=$(docker ps -a --format '{{.Image}}')
+while IFS= read -r previous_image; do
+  [[ "$previous_image" == ghcr.io/jimgreco/package_tracker:* ]] || continue
+  [[ "$previous_image" == "$image" || "$previous_image" == "$pinned_image" ]] && continue
+  if grep -Fxq "$previous_image" <<< "$running_images"; then continue; fi
+  docker image rm "$previous_image"
+done < <(docker image ls --format '{{.Repository}}:{{.Tag}}')
 compose pull doorstep doorstep-worker
 compose run --rm --no-deps -T doorstep ./node_modules/.bin/tsx scripts/migrate.ts </dev/null
 compose up -d --no-deps --no-build doorstep doorstep-worker
