@@ -51,7 +51,7 @@ struct PackagesView: View {
           Text(store.householdName).font(.subheadline.weight(.semibold))
           Text(
             filter == .onTheWay
-              ? "Today's deliveries first. Other packages are newest first."
+              ? "Today's deliveries first. Future packages are newest first."
               : "Newest orders first."
           )
             .font(.caption).foregroundStyle(.secondary)
@@ -75,31 +75,33 @@ struct PackagesView: View {
         }
       }.listRowBackground(Color.clear)
       if filter == .onTheWay {
-        Section("Delivered today") {
-          if sections.deliveredToday.isEmpty {
-            Text("No packages delivered today.").foregroundStyle(.secondary)
+        if !sections.deliveredToday.isEmpty {
+          Section("Delivered today") {
+            ForEach(sections.deliveredToday) { shipment in packageLink(shipment) }
           }
-          ForEach(sections.deliveredToday) { shipment in packageLink(shipment) }
         }
-        Section("Expected today") {
-          if sections.expectedToday.isEmpty {
-            Text("No packages expected today.").foregroundStyle(.secondary)
+        if !sections.expectedToday.isEmpty {
+          Section("Expected today") {
+            ForEach(sections.expectedToday) { shipment in packageLink(shipment) }
           }
-          ForEach(sections.expectedToday) { shipment in packageLink(shipment) }
         }
       }
-      Section(filter == .onTheWay ? "Other packages" : filter.rawValue) {
-        if sections.remaining.isEmpty {
-          ContentUnavailableView(
-            search.isEmpty ? "No packages here" : "No matching packages",
-            systemImage: "shippingbox",
-            description: Text(
-              store.loading ? "Loading your household…"
-                : store.shipments.contains(where: { $0.snoozedAt != nil })
-                  ? "Check Snoozed below or try another filter."
-                  : "Try another filter or add a package."))
+      if !sections.remaining.isEmpty {
+        Section(filter == .onTheWay ? "Future Packages" : filter.rawValue) {
+          ForEach(sections.remaining) { shipment in packageLink(shipment) }
         }
-        ForEach(sections.remaining) { shipment in packageLink(shipment) }
+      }
+      if sections.deliveredToday.isEmpty && sections.expectedToday.isEmpty
+        && sections.remaining.isEmpty && sections.snoozed.isEmpty
+      {
+        ContentUnavailableView(
+          search.isEmpty ? "No packages here" : "No matching packages",
+          systemImage: "shippingbox",
+          description: Text(
+            store.loading ? "Loading your household…"
+              : store.shipments.contains(where: { $0.snoozedAt != nil })
+                ? "Check Snoozed below or try another filter."
+                : "Try another filter or add a package."))
       }
       if !sections.snoozed.isEmpty {
         Section("Snoozed") {

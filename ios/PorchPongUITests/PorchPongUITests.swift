@@ -132,7 +132,7 @@ import XCTest
     launch(["--today-sections"])
     let delivered = app.staticTexts["Delivered today"]
     let expected = app.staticTexts["Expected today"]
-    let other = app.staticTexts["Other packages"]
+    let future = app.staticTexts["Future Packages"]
     let snoozed = app.staticTexts["Snoozed"]
     XCTAssertTrue(delivered.waitForExistence(timeout: 5))
     XCTAssertTrue(expected.exists)
@@ -140,13 +140,32 @@ import XCTest
     XCTAssertTrue(app.staticTexts["Cometeer"].exists)
     XCTAssertTrue(app.staticTexts["Schoolhouse"].exists)
     screenshot("packages-today-sections")
-    reveal(other)
-    XCTAssertTrue(other.exists)
+    reveal(future)
+    XCTAssertTrue(future.exists)
+    XCTAssertFalse(app.staticTexts["Other packages"].exists)
     XCTAssertTrue(app.staticTexts["Muji"].exists)
     reveal(snoozed)
     XCTAssertTrue(snoozed.exists)
     XCTAssertTrue(app.staticTexts["Snoozed parcel"].exists)
     screenshot("packages-remaining-snoozed")
+  }
+  func testPackagesHideEmptySections() {
+    launch()
+    XCTAssertTrue(app.staticTexts["Expected today"].waitForExistence(timeout: 5))
+    XCTAssertFalse(app.staticTexts["Delivered today"].exists)
+    XCTAssertTrue(app.staticTexts["Future Packages"].exists)
+
+    let search = app.searchFields.firstMatch
+    search.tap()
+    search.typeText("Schoolhouse")
+    XCTAssertTrue(app.staticTexts["Expected today"].exists)
+    XCTAssertFalse(app.staticTexts["Future Packages"].exists)
+
+    search.buttons["Clear text"].tap()
+    search.typeText("No matching merchant")
+    XCTAssertTrue(app.staticTexts["No matching packages"].exists)
+    XCTAssertFalse(app.staticTexts["Expected today"].exists)
+    XCTAssertFalse(app.staticTexts["Future Packages"].exists)
   }
   func testPackagesCalendarSwitchAndDates() {
     launch()
