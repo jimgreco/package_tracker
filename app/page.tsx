@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import {
   Package,
   ArrowUpRight,
@@ -200,7 +200,13 @@ export default function Page() {
   const all = undismissed.filter((s) => !s.snoozedAt);
   const snoozed = undismissed.filter((s) => s.snoozedAt);
   const matchesSearch = (s: Shipment) =>
-    [s.merchant, s.orderNumber, s.trackingNumber, ...s.items.map((i) => i.name)]
+    [
+      s.merchant,
+      s.note,
+      s.orderNumber,
+      s.trackingNumber,
+      ...s.items.map((i) => i.name),
+    ]
       .filter(Boolean)
       .join(" ")
       .toLowerCase()
@@ -238,7 +244,7 @@ export default function Page() {
       );
     });
   }
-  const active = all.filter((s) =>
+  const hasActiveStatus = (s: Shipment) =>
     [
       "ordered",
       "pre_transit",
@@ -247,27 +253,26 @@ export default function Page() {
       "delayed",
       "available_for_pickup",
       "failure",
-    ].includes(s.status),
-  );
+    ].includes(s.status);
+  const active = all.filter(hasActiveStatus);
+  const mergeTargets = undismissed.filter(hasActiveStatus);
   const arriving = active.filter((s) =>
     includesDay(s, today, data!.settings.timeZone),
   );
   const delivered = all.filter((s) => s.status === "delivered");
+  const needsAttention = (s: Shipment) => (s.attentionReasons?.length ?? 0) > 0;
+  const attention = all.filter(needsAttention);
   const visible = (
     filter === "Dismissed"
       ? (data?.shipments || []).filter((s) => s.dismissedAt)
-      : all
-  ).filter(
-    (s) =>
-      (filter === "All packages" ||
-        filter === "Dismissed" ||
-        (filter === "On the way"
-          ? active.includes(s)
-          : filter === "Delivered"
-            ? s.status === "delivered"
-            : (s.attentionReasons?.length ?? 0) > 0)) &&
-      matchesSearch(s),
-  );
+      : filter === "On the way"
+        ? [...attention, ...active.filter((s) => !needsAttention(s))]
+        : filter === "Delivered"
+          ? delivered
+          : all
+  ).filter(matchesSearch);
+  const visibleAttentionCount =
+    filter === "On the way" ? visible.filter(needsAttention).length : 0;
   const upcoming = all
     .filter(
       (s) => s.estimate && s.status !== "delivered" && s.status !== "cancelled",
@@ -452,7 +457,6 @@ export default function Page() {
                           {[
                             "On the way",
                             "Delivered",
-                            "Needs attention",
                             "Dismissed",
                             "All packages",
                           ].map((t) => (
@@ -481,7 +485,7 @@ export default function Page() {
                         <Search size={17} />
                         <input
                           type="search"
-                          placeholder="Search shops, items, or tracking numbers"
+                          placeholder="Search shops, notes, items, or tracking numbers"
                           value={search}
                           onChange={(e) => setSearch(e.target.value)}
                           aria-label="Search packages"
@@ -489,168 +493,206 @@ export default function Page() {
                       </div>
                       {visible.length ? (
                         <div className="shipment-list">
-                          {visible.map((s) => (
-                            <article className="shipment-entry" key={s.id}>
-                              <button
-                                className={
-                                  "shipment-card " +
-                                  (s.status === "out_for_delivery"
-                                    ? "arriving-card"
-                                    : "")
-                                }
-                                onClick={() => select(s.id)}
-                              >
-                                <MerchantTile shipment={s} />
-                                <div className="shipment-main">
-                                  <div className="shipment-heading">
-                                    <h3>{s.merchant}</h3>
-                                    <span
-                                      className={"status status-" + s.status}
-                                    >
-                                      {STATUS_LABEL[s.status]}
-                                    </span>
-                                    {!!s.attentionReasons?.length && (
-                                      <span
-                                        className="review-indicator"
-                                        title={s.attentionReasons?.join(" ")}
-                                      >
-                                        <AlertCircle size={14} />
-                                      </span>
-                                    )}
-                                  </div>
-                                  <p>
-                                    {s.items
-                                      .map(
-                                        (i) =>
-                                          i.name +
-                                          (i.quantity > 1
-                                            ? " × " + i.quantity
-                                            : ""),
-                                      )
-                                      .join(", ") ||
-                                      "Item details not available"}
-                                  </p>
-                                  {s.collectedAt && (
+                          {visible.map((s, index) => (
+                            <Fragment key={s.id}>
+                              {filter === "On the way" &&
+                                index === 0 &&
+                                visibleAttentionCount > 0 && (
+                                  <div className="package-section-heading">
+                                    <h2>Needs attention</h2>
                                     <p>
-                                      Collected by{" "}
-                                      {s.collectedByName ||
-                                        "a household member"}
+                                      Review these packages and their source
+                                      emails.
                                     </p>
-                                  )}
-                                  {!!s.attentionReasons?.length && (
-                                    <p className="attention-summary">
-                                      {s.attentionReasons[0]}
+                                  </div>
+                                )}
+                              {filter === "On the way" &&
+                                index === visibleAttentionCount &&
+                                visible.length > visibleAttentionCount && (
+                                  <div className="package-section-heading">
+                                    <h2>On the way</h2>
+                                  </div>
+                                )}
+                              <article className="shipment-entry">
+                                <button
+                                  className={
+                                    "shipment-card " +
+                                    (s.status === "out_for_delivery"
+                                      ? "arriving-card"
+                                      : "")
+                                  }
+                                  onClick={() => select(s.id)}
+                                >
+                                  <MerchantTile shipment={s} />
+                                  <div className="shipment-main">
+                                    <div className="shipment-heading">
+                                      <h3>{s.merchant}</h3>
+                                      <span
+                                        className={"status status-" + s.status}
+                                      >
+                                        {STATUS_LABEL[s.status]}
+                                      </span>
+                                      {!!s.attentionReasons?.length && (
+                                        <span
+                                          className="review-indicator"
+                                          title={s.attentionReasons?.join(" ")}
+                                        >
+                                          <AlertCircle size={14} />
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p>
+                                      {s.items
+                                        .map(
+                                          (i) =>
+                                            i.name +
+                                            (i.quantity > 1
+                                              ? " × " + i.quantity
+                                              : ""),
+                                        )
+                                        .join(", ") ||
+                                        "Item details not available"}
                                     </p>
-                                  )}
-                                  <div className="shipment-meta">
-                                    <span>
-                                      {s.carrier || "Awaiting shipping details"}
-                                    </span>
-                                    {s.orderNumber && (
-                                      <span>{s.orderNumber}</span>
+                                    {s.note && (
+                                      <p className="package-note">
+                                        <strong>Your note</strong>
+                                        {s.note}
+                                      </p>
+                                    )}
+                                    {s.collectedAt && (
+                                      <p>
+                                        Collected by{" "}
+                                        {s.collectedByName ||
+                                          "a household member"}
+                                      </p>
+                                    )}
+                                    {!!s.attentionReasons?.length && (
+                                      <p className="attention-summary">
+                                        {s.attentionReasons[0]}
+                                      </p>
+                                    )}
+                                    <div className="shipment-meta">
+                                      <span>
+                                        {s.carrier ||
+                                          "Awaiting shipping details"}
+                                      </span>
+                                      {s.orderNumber && (
+                                        <span>{s.orderNumber}</span>
+                                      )}
+                                    </div>
+                                    {s.status === "out_for_delivery" && (
+                                      <div
+                                        className="delivery-progress"
+                                        aria-label="Out for delivery"
+                                      >
+                                        <span />
+                                        <span />
+                                        <span />
+                                        <span className="unfinished" />
+                                      </div>
                                     )}
                                   </div>
-                                  {s.status === "out_for_delivery" && (
-                                    <div
-                                      className="delivery-progress"
-                                      aria-label="Out for delivery"
-                                    >
-                                      <span />
-                                      <span />
-                                      <span />
-                                      <span className="unfinished" />
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="shipment-eta">
-                                  <span>
-                                    {s.status === "delivered"
-                                      ? "Delivered"
-                                      : "Expected delivery"}
-                                  </span>
-                                  <strong>
-                                    {s.status === "delivered"
-                                      ? s.deliveredAt
-                                        ? dateLabel(
-                                            dayFor(s, data.settings.timeZone)!,
-                                          )
-                                        : "Date not specified"
-                                      : s.estimate?.start.slice(0, 10) ===
-                                            today &&
-                                          s.estimate.kind !== "date_range"
-                                        ? "Today"
-                                        : estimateLabel(s.estimate)}
-                                  </strong>
-                                  {s.status !== "delivered" &&
-                                    estimateTime(s.estimate) && (
-                                      <small>{estimateTime(s.estimate)}</small>
-                                    )}
-                                </div>
-                                <ChevronRight
-                                  className="card-arrow"
-                                  size={19}
-                                />
-                              </button>
-                              <div className="package-quick-actions">
-                                <span>
-                                  {s.firstEmailAt &&
-                                  s.firstEmailAt <= s.createdAt
-                                    ? "First email"
-                                    : "Added"}{" "}
-                                  {messageDateLabel(
-                                    s.timelineAt,
-                                    data.settings.timeZone,
-                                  )}
-                                </span>
-                                <div>
-                                  {s.dismissedAt ? (
-                                    <button
-                                      className="subtle-button"
-                                      disabled={busy === `package:${s.id}`}
-                                      onClick={() => quickAction(s, "restore")}
-                                    >
-                                      Restore
-                                    </button>
-                                  ) : (
-                                    <>
-                                      {![
-                                        "delivered",
-                                        "cancelled",
-                                        "return_to_sender",
-                                      ].includes(s.status) && (
-                                        <button
-                                          className="subtle-button"
-                                          disabled={busy === `package:${s.id}`}
-                                          onClick={() =>
-                                            quickAction(s, "deliver")
-                                          }
-                                        >
-                                          <Check size={14} />
-                                          Mark delivered
-                                        </button>
+                                  <div className="shipment-eta">
+                                    <span>
+                                      {s.status === "delivered"
+                                        ? "Delivered"
+                                        : "Expected delivery"}
+                                    </span>
+                                    <strong>
+                                      {s.status === "delivered"
+                                        ? s.deliveredAt
+                                          ? dateLabel(
+                                              dayFor(
+                                                s,
+                                                data.settings.timeZone,
+                                              )!,
+                                            )
+                                          : "Date not specified"
+                                        : s.estimate?.start.slice(0, 10) ===
+                                              today &&
+                                            s.estimate.kind !== "date_range"
+                                          ? "Today"
+                                          : estimateLabel(s.estimate)}
+                                    </strong>
+                                    {s.status !== "delivered" &&
+                                      estimateTime(s.estimate) && (
+                                        <small>
+                                          {estimateTime(s.estimate)}
+                                        </small>
                                       )}
-                                      <button
-                                        className="subtle-button"
-                                        disabled={busy === `package:${s.id}`}
-                                        onClick={() => quickAction(s, "snooze")}
-                                      >
-                                        Snooze
-                                      </button>
+                                  </div>
+                                  <ChevronRight
+                                    className="card-arrow"
+                                    size={19}
+                                  />
+                                </button>
+                                <div className="package-quick-actions">
+                                  <span>
+                                    {s.firstEmailAt &&
+                                    s.firstEmailAt <= s.createdAt
+                                      ? "First email"
+                                      : "Added"}{" "}
+                                    {messageDateLabel(
+                                      s.timelineAt,
+                                      data.settings.timeZone,
+                                    )}
+                                  </span>
+                                  <div>
+                                    {s.dismissedAt ? (
                                       <button
                                         className="subtle-button"
                                         disabled={busy === `package:${s.id}`}
                                         onClick={() =>
-                                          quickAction(s, "dismiss")
+                                          quickAction(s, "restore")
                                         }
                                       >
-                                        <X size={14} />
-                                        Dismiss
+                                        Restore
                                       </button>
-                                    </>
-                                  )}
+                                    ) : (
+                                      <>
+                                        {![
+                                          "delivered",
+                                          "cancelled",
+                                          "return_to_sender",
+                                        ].includes(s.status) && (
+                                          <button
+                                            className="subtle-button"
+                                            disabled={
+                                              busy === `package:${s.id}`
+                                            }
+                                            onClick={() =>
+                                              quickAction(s, "deliver")
+                                            }
+                                          >
+                                            <Check size={14} />
+                                            Mark delivered
+                                          </button>
+                                        )}
+                                        <button
+                                          className="subtle-button"
+                                          disabled={busy === `package:${s.id}`}
+                                          onClick={() =>
+                                            quickAction(s, "snooze")
+                                          }
+                                        >
+                                          Snooze
+                                        </button>
+                                        <button
+                                          className="subtle-button"
+                                          disabled={busy === `package:${s.id}`}
+                                          onClick={() =>
+                                            quickAction(s, "dismiss")
+                                          }
+                                        >
+                                          <X size={14} />
+                                          Dismiss
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                            </article>
+                              </article>
+                            </Fragment>
                           ))}
                         </div>
                       ) : (
@@ -856,6 +898,11 @@ export default function Page() {
                                 {s.items.map((i) => i.name).join(", ") ||
                                   STATUS_LABEL[s.status]}
                               </span>
+                              {s.note && (
+                                <span className="snoozed-note">
+                                  Your note: {s.note}
+                                </span>
+                              )}
                             </button>
                             <button
                               className="subtle-button"
@@ -1011,6 +1058,12 @@ export default function Page() {
                       <p key={reason}>{reason}</p>
                     ))}
                   </div>
+                </div>
+              )}
+              {detail.shipment.note && (
+                <div className="info-box package-detail-note">
+                  <strong>Your note</strong>
+                  <p>{detail.shipment.note}</p>
                 </div>
               )}
               {detail.shipment.status === "delivered" && (
@@ -1281,21 +1334,25 @@ export default function Page() {
                     : "Added manually. Future shipping emails will appear here."}
                 </p>
               )}
-              {all.length > 1 && (
-                <button
-                  className="subtle-button merge-link"
-                  onClick={() => setMerge(true)}
-                >
-                  <Merge size={16} />
-                  Merge into another package
-                </button>
-              )}
+              {detail.shipment.collectedAt == null &&
+                mergeTargets.some((s) => s.id !== detail.shipment.id) && (
+                  <button
+                    className="subtle-button merge-link"
+                    onClick={() => setMerge(true)}
+                  >
+                    <Merge size={16} />
+                    Merge into an active package
+                  </button>
+                )}
             </div>
           )}
         </Modal>
       )}
       {merge && selected && (
-        <Modal title="Merge duplicate package" onClose={() => setMerge(false)}>
+        <Modal
+          title="Merge into an active package"
+          onClose={() => setMerge(false)}
+        >
           <form
             className="form-body"
             onSubmit={(e) => {
@@ -1311,18 +1368,21 @@ export default function Page() {
             }}
           >
             <p className="form-intro">
-              Keep the selected package’s details and combine both histories and
-              source emails. The duplicate will be archived and its calendar
-              event removed.
+              Choose an active or snoozed package to keep. Its details stay as
+              shown; source emails and tracking history from this package will
+              move to it. This package will be archived and its calendar event
+              removed.
             </p>
             <label>
-              Package to keep
+              Active package to keep
               <select name="targetId" required>
-                {all
+                <option value="">Choose a package</option>
+                {mergeTargets
                   .filter((s) => s.id !== selected)
                   .map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.merchant} · {s.items[0]?.name || s.orderNumber}
+                      {s.merchant} · {s.items[0]?.name || s.orderNumber} ·{" "}
+                      {s.snoozedAt ? "Snoozed" : STATUS_LABEL[s.status]}
                     </option>
                   ))}
               </select>

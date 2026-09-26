@@ -22,6 +22,7 @@ export const manualSchema = z
     orderNumber: z.string().trim().max(200).nullable(),
     orderedAt: z.iso.date().nullable(),
     items: z.array(itemSchema).min(1).max(100),
+    note: z.string().trim().max(1000).nullable().optional(),
     carrier: z.string().trim().max(80).nullable(),
     trackingNumber: z.string().trim().max(200).nullable(),
     trackingUrl: z.string().max(2000).nullable(),

@@ -19,6 +19,7 @@ struct Shipment: Codable, Identifiable, Equatable, Sendable {
   var orderNumber: String?
   var orderedAt: String?
   var items: [PackageItem]
+  var note: String? = nil
   var carrier: String?
   var trackingNumber: String?
   var trackingUrl: String?
@@ -51,7 +52,7 @@ struct Shipment: Codable, Identifiable, Equatable, Sendable {
   }
   func matchesSearch(_ search: String) -> Bool {
     search.isEmpty
-      || [merchant, summary, orderNumber ?? "", trackingNumber ?? ""].contains {
+      || [merchant, summary, note ?? "", orderNumber ?? "", trackingNumber ?? ""].contains {
         $0.localizedCaseInsensitiveContains(search)
       }
   }
@@ -67,10 +68,20 @@ struct Shipment: Codable, Identifiable, Equatable, Sendable {
 enum PackageFilter: String, CaseIterable, Identifiable {
   case onTheWay = "On the way"
   case delivered = "Delivered"
-  case attention = "Needs attention"
   case dismissed = "Dismissed"
   case all = "All packages"
   var id: String { rawValue }
+  static func needsAttention(_ s: Shipment) -> Bool {
+    s.attentionReasons.map { !$0.isEmpty }
+      ?? (s.needsReview || ["failure", "delayed", "unknown"].contains(s.status))
+  }
+  static func isActive(_ s: Shipment) -> Bool {
+    s.archivedAt == nil && s.dismissedAt == nil
+      && [
+        "ordered", "pre_transit", "in_transit", "out_for_delivery", "delayed",
+        "available_for_pickup", "failure",
+      ].contains(s.status)
+  }
   func includes(_ s: Shipment) -> Bool {
     guard s.archivedAt == nil else { return false }
     if self == .dismissed { return s.dismissedAt != nil }
@@ -78,12 +89,8 @@ enum PackageFilter: String, CaseIterable, Identifiable {
     switch self {
     case .all: return true
     case .onTheWay:
-      return [
-        "ordered", "pre_transit", "in_transit", "out_for_delivery", "delayed",
-        "available_for_pickup", "failure",
-      ].contains(s.status)
+      return Self.needsAttention(s) || Self.isActive(s)
     case .delivered: return s.status == "delivered"
-    case .attention: return s.attentionReasons.map { !$0.isEmpty } ?? (s.needsReview || ["failure", "delayed", "unknown"].contains(s.status))
     case .dismissed: return false
     }
   }
@@ -94,6 +101,7 @@ enum PackageFilter: String, CaseIterable, Identifiable {
 struct PackageHomeSections {
   let deliveredToday: [Shipment]
   let expectedToday: [Shipment]
+  let attention: [Shipment]
   let remaining: [Shipment]
   let snoozed: [Shipment]
 
@@ -103,22 +111,27 @@ struct PackageHomeSections {
       $0.archivedAt == nil && $0.dismissedAt == nil && $0.snoozedAt != nil
     }
     if filter == .onTheWay {
+      attention = PackageFilter.onTheWay.results(matching).filter {
+        PackageFilter.needsAttention($0)
+      }
       let today = Dates.formatter("yyyy-MM-dd", zone: zone).string(from: now)
       deliveredToday = matching.filter {
         $0.archivedAt == nil && $0.dismissedAt == nil && $0.snoozedAt == nil
+          && !PackageFilter.needsAttention($0)
           && $0.status == "delivered"
           && $0.deliveredAt.flatMap { Dates.instant($0) }.map {
             Dates.formatter("yyyy-MM-dd", zone: zone).string(from: $0) == today
           } == true
       }
       expectedToday = PackageFilter.onTheWay.results(matching).filter {
-        Dates.arrivingToday($0, zone: zone, now: now)
+        !PackageFilter.needsAttention($0) && Dates.arrivingToday($0, zone: zone, now: now)
       }
     } else {
       deliveredToday = []
       expectedToday = []
+      attention = []
     }
-    let highlighted = Set((deliveredToday + expectedToday).map(\.id))
+    let highlighted = Set((deliveredToday + expectedToday + attention).map(\.id))
     remaining = filter.results(matching).filter { !highlighted.contains($0.id) }
   }
 }
@@ -267,6 +280,7 @@ struct NativeSession: Codable, Sendable, Equatable {
 }
 struct ManualPackage: Codable, Equatable, Sendable {
   var merchant = ""
+  var note: String?
   var orderNumber: String?
   var orderedAt: String?
   var items = [PackageItem(name: "", quantity: 1)]
@@ -281,6 +295,7 @@ struct ManualPackage: Codable, Equatable, Sendable {
   init(_ s: Shipment? = nil) {
     guard let s else { return }
     merchant = s.merchant
+    note = s.note
     orderNumber = s.orderNumber
     orderedAt = s.orderedAt
     items = s.items
@@ -297,7 +312,7 @@ struct ManualPackage: Codable, Equatable, Sendable {
   func payload() throws -> Data {
     var value = try JSONSerialization.jsonObject(with: JSONEncoder().encode(self)) as! [String: Any]
     for key in [
-      "orderNumber", "orderedAt", "carrier", "trackingNumber", "trackingUrl", "shippedAt",
+      "note", "orderNumber", "orderedAt", "carrier", "trackingNumber", "trackingUrl", "shippedAt",
       "estimate", "deliveredAt",
     ] where value[key] == nil { value[key] = NSNull() }
     value["items"] = items.map {
@@ -328,6 +343,7 @@ struct ManualPackage: Codable, Equatable, Sendable {
     if let trackingUrl, URL(string: trackingUrl)?.scheme != "https" {
       return "Tracking links must use HTTPS."
     }
+    if let note, note.count > 1000 { return "Keep your note under 1,000 characters." }
     return nil
   }
 }

@@ -49,6 +49,15 @@ struct PackageForm: View {
               value.items.append(PackageItem(name: "", quantity: 1))
             }.disabled(value.items.count >= 100)
           }
+          Section("Your note") {
+            TextField(
+              "How you'll recognize this package", text: optional(\.note), axis: .vertical
+            )
+            .lineLimit(3...6)
+            .accessibilityIdentifier("packageNoteField")
+            Text("Visible in your package list. Optional, up to 1,000 characters.")
+              .font(.caption).foregroundStyle(.secondary)
+          }
           Section {
             DisclosureGroup("Order and tracking") {
               TextField("Order number", text: optional(\.orderNumber))

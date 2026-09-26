@@ -68,11 +68,6 @@ struct PackagesView: View {
             ).font(.subheadline).frame(minHeight: 44)
           }.accessibilityIdentifier("packageFilter")
         }
-        if filter == .attention {
-          Text("Missed estimates, stalled orders, tracking problems, or details that need review.")
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-        }
       }.listRowBackground(Color.clear)
       if filter == .onTheWay {
         if !sections.deliveredToday.isEmpty {
@@ -85,6 +80,13 @@ struct PackagesView: View {
             ForEach(sections.expectedToday) { shipment in packageLink(shipment) }
           }
         }
+        if !sections.attention.isEmpty {
+          Section("Needs attention") {
+            Text("Review these packages and their source emails.")
+              .font(.footnote).foregroundStyle(.secondary)
+            ForEach(sections.attention) { shipment in packageLink(shipment) }
+          }
+        }
       }
       if !sections.remaining.isEmpty {
         Section(filter == .onTheWay ? "Future Packages" : filter.rawValue) {
@@ -92,7 +94,7 @@ struct PackagesView: View {
         }
       }
       if sections.deliveredToday.isEmpty && sections.expectedToday.isEmpty
-        && sections.remaining.isEmpty && sections.snoozed.isEmpty
+        && sections.attention.isEmpty && sections.remaining.isEmpty && sections.snoozed.isEmpty
       {
         ContentUnavailableView(
           search.isEmpty ? "No packages here" : "No matching packages",
@@ -123,7 +125,7 @@ struct PackagesView: View {
     }
     .scrollContentBackground(.hidden).background(Color.canvas)
     .searchable(
-      text: $search, prompt: "Merchant, item, order or tracking"
+      text: $search, prompt: "Merchant, note, item, order or tracking"
     )
     .refreshable { await store.refresh() }
   }
@@ -170,6 +172,14 @@ struct PackageRow: View {
       VStack(alignment: .leading, spacing: 4) {
         Text(shipment.merchant).font(.headline)
         Text(shipment.summary).font(.subheadline).foregroundStyle(.secondary)
+        if let note = shipment.note, !note.isEmpty {
+          Text("Your note: \(note)")
+            .font(.subheadline)
+            .foregroundStyle(.primary)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(8)
+            .background(Color.yellow.opacity(0.12), in: RoundedRectangle(cornerRadius: 7))
+        }
         StatusLabel(status: shipment.status)
         Text(Dates.delivery(shipment, zone: store.timeZone, now: store.now())).font(.footnote)
         if let number = shipment.orderNumber {

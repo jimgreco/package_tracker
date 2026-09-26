@@ -204,6 +204,7 @@
             id: parts.count == 2 ? parts[1] : UUID().uuidString, merchant: manual.merchant,
             status: manual.status)
           shipment.items = manual.items
+          shipment.note = manual.note
           shipment.estimate = manual.estimate
           shipment.manualOverride = manual.manualOverride
           if let i = value.shipments.firstIndex(where: { $0.id == shipment.id }) {

@@ -195,6 +195,7 @@ export function PackageForm({
           orderNumber: str("orderNumber") || null,
           orderedAt: str("orderedAt") || null,
           items,
+          note: str("note") || null,
           carrier: str("carrier") || null,
           trackingNumber: str("trackingNumber") || null,
           trackingUrl: str("trackingUrl") || null,
@@ -307,6 +308,16 @@ export function PackageForm({
           </div>
         ))}
       </div>
+      <label>
+        Your note <span>Optional · visible in your package list</span>
+        <textarea
+          name="note"
+          defaultValue={value?.note || ""}
+          placeholder="e.g. Blue lamp for the guest room"
+          maxLength={1000}
+          rows={3}
+        />
+      </label>
       <div className="form-grid">
         <label>
           Carrier

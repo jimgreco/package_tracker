@@ -41,6 +41,11 @@ struct PackageDetailView: View {
             }
           }
         }
+        if let note = s.note, !note.isEmpty {
+          Section("Your note") {
+            Text(note).textSelection(.enabled)
+          }
+        }
         Section("Package details") {
           if let order = s.orderNumber { copyRow("Order number", order) }
           LabeledContent("Order date", value: Dates.day(s.orderedAt, zone: store.timeZone))
@@ -111,8 +116,10 @@ struct PackageDetailView: View {
             }.disabled(!store.canWrite)
           }
           Button("Edit details") { editing = true }.disabled(!store.canWrite)
-          Button("Merge duplicate entries") { merging = true }.disabled(
-            !store.canWrite || store.shipments.count < 2)
+          Button("Merge into an active package") { merging = true }.disabled(
+            !store.canWrite || s.collectedAt != nil || !store.shipments.contains {
+              $0.id != s.id && PackageFilter.isActive($0)
+            })
         }
         Section("Tracking history") {
           if detail.events.isEmpty { Text("No updates yet.").foregroundStyle(.secondary) }
@@ -218,13 +225,17 @@ struct MergeView: View {
     NavigationStack {
       List {
         Section("Entry to archive") { PackageRow(shipment: source) }
-        Section("Choose the entry to keep") {
-          ForEach(store.shipments.filter { $0.id != source.id && $0.archivedAt == nil }) { s in
+        Section("Choose an active package to keep") {
+          ForEach(store.shipments.filter { $0.id != source.id && PackageFilter.isActive($0) }) { s in
             Button {
               target = s
             } label: {
               VStack(alignment: .leading) {
                 PackageRow(shipment: s)
+                if s.snoozedAt != nil {
+                  Label("Snoozed", systemImage: "moon.zzz")
+                    .font(.caption).foregroundStyle(.secondary)
+                }
                 if target?.id == s.id {
                   Label("Keep this package", systemImage: "checkmark.circle.fill")
                 }
@@ -242,7 +253,7 @@ struct MergeView: View {
           }
         }
         ServiceBanner()
-      }.navigationTitle("Merge duplicates").toolbar { Button("Cancel") { dismiss() } }
+      }.navigationTitle("Merge packages").toolbar { Button("Cancel") { dismiss() } }
         .confirmationDialog(
           "Merge these two packages?", isPresented: $confirming, titleVisibility: .visible
         ) {

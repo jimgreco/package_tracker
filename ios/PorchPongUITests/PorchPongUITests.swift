@@ -83,8 +83,9 @@ import XCTest
   func testAttentionReasonsAndNotificationSettings() {
     launch()
     XCTAssertTrue(app.buttons["packageFilter"].waitForExistence(timeout: 5))
-    app.buttons["packageFilter"].tap()
-    app.buttons["Needs attention (1)"].tap()
+    let attention = app.staticTexts["Needs attention"]
+    reveal(attention)
+    XCTAssertTrue(attention.exists)
     app.staticTexts["Muji"].tap()
     XCTAssertTrue(
       app.staticTexts["Tracking is overdue for a fresh check."].waitForExistence(timeout: 5))
@@ -93,6 +94,20 @@ import XCTest
     reveal(app.switches["Send me notifications"])
     XCTAssertTrue(app.switches["Send me notifications"].exists)
     screenshot("notification-preferences")
+  }
+  func testMergeOffersActiveAndSnoozedDestinations() {
+    launch(["--today-sections"])
+    let source = app.staticTexts["Muji"]
+    reveal(source)
+    source.tap()
+    let merge = app.buttons["Merge into an active package"]
+    reveal(merge)
+    merge.tap()
+    XCTAssertTrue(app.staticTexts["Schoolhouse"].waitForExistence(timeout: 5))
+    let snoozed = app.staticTexts["Snoozed parcel"]
+    reveal(snoozed)
+    XCTAssertTrue(snoozed.exists)
+    XCTAssertFalse(app.staticTexts["Cometeer"].exists)
   }
   func testSignInLanding() {
     launch(["--signed-out"])
@@ -132,7 +147,6 @@ import XCTest
     launch(["--today-sections"])
     let delivered = app.staticTexts["Delivered today"]
     let expected = app.staticTexts["Expected today"]
-    let future = app.staticTexts["Future Packages"]
     let snoozed = app.staticTexts["Snoozed"]
     XCTAssertTrue(delivered.waitForExistence(timeout: 5))
     XCTAssertTrue(expected.exists)
@@ -140,9 +154,8 @@ import XCTest
     XCTAssertTrue(app.staticTexts["Cometeer"].exists)
     XCTAssertTrue(app.staticTexts["Schoolhouse"].exists)
     screenshot("packages-today-sections")
-    reveal(future)
-    XCTAssertTrue(future.exists)
-    XCTAssertFalse(app.staticTexts["Other packages"].exists)
+    reveal(app.staticTexts["Muji"])
+    XCTAssertFalse(app.staticTexts["Future Packages"].exists)
     XCTAssertTrue(app.staticTexts["Muji"].exists)
     reveal(snoozed)
     XCTAssertTrue(snoozed.exists)
@@ -153,19 +166,20 @@ import XCTest
     launch()
     XCTAssertTrue(app.staticTexts["Expected today"].waitForExistence(timeout: 5))
     XCTAssertFalse(app.staticTexts["Delivered today"].exists)
-    XCTAssertTrue(app.staticTexts["Future Packages"].exists)
+    XCTAssertTrue(app.staticTexts["Needs attention"].exists)
+    XCTAssertFalse(app.staticTexts["Future Packages"].exists)
 
     let search = app.searchFields.firstMatch
     search.tap()
     search.typeText("Schoolhouse")
     XCTAssertTrue(app.staticTexts["Expected today"].exists)
-    XCTAssertFalse(app.staticTexts["Future Packages"].exists)
+    XCTAssertFalse(app.staticTexts["Needs attention"].exists)
 
     search.buttons["Clear text"].tap()
     search.typeText("No matching merchant")
     XCTAssertTrue(app.staticTexts["No matching packages"].exists)
     XCTAssertFalse(app.staticTexts["Expected today"].exists)
-    XCTAssertFalse(app.staticTexts["Future Packages"].exists)
+    XCTAssertFalse(app.staticTexts["Needs attention"].exists)
   }
   func testPackagesCalendarSwitchAndDates() {
     launch()
@@ -268,8 +282,16 @@ import XCTest
     app.textFields["merchantField"].typeText("Local bookstore")
     app.textFields["itemField0"].tap()
     app.textFields["itemField0"].typeText("Novel")
+    let note = app.descendants(matching: .any)["packageNoteField"]
+    reveal(note)
+    note.tap()
+    note.typeText("Gift for Alex")
     app.buttons["savePackage"].tap()
-    XCTAssertTrue(app.staticTexts["Local bookstore"].waitForExistence(timeout: 5))
+    let package = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Local bookstore"))
+      .firstMatch
+    reveal(package)
+    XCTAssertTrue(package.waitForExistence(timeout: 5))
+    XCTAssertTrue(package.label.contains("Your note: Gift for Alex"))
     screenshot("created-package")
   }
   func testGoogleCalendarControls() {

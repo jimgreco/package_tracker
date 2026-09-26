@@ -40,6 +40,7 @@ export type Shipment = {
   orderNumber: string | null;
   orderedAt: string | null;
   items: Item[];
+  note: string | null;
   carrier: string | null;
   trackingNumber: string | null;
   trackingUrl: string | null;

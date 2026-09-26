@@ -428,6 +428,21 @@ h1 > span {
   flex-direction: column;
   gap: 12px;
 }
+.package-section-heading {
+  margin-top: 12px;
+}
+.package-section-heading:first-child {
+  margin-top: 0;
+}
+.package-section-heading h2 {
+  font-size: 17px;
+  letter-spacing: -0.3px;
+}
+.package-section-heading p {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 4px;
+}
 .shipment-card {
   width: 100%;
   text-align: left;
@@ -540,6 +555,28 @@ h1 > span {
   text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap;
+}
+.shipment-main > .package-note {
+  background: #fff9e9;
+  border-radius: 7px;
+  color: #614d26;
+  line-height: 1.45;
+  margin-top: 9px;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  padding: 8px 10px;
+  text-overflow: clip;
+  white-space: pre-wrap;
+}
+.package-note strong,
+.package-detail-note strong {
+  display: block;
+  font-size: 11px;
+  margin-bottom: 3px;
+}
+.package-detail-note p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .shipment-meta {
   display: flex;
@@ -2642,6 +2679,13 @@ footer {
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.snoozed-row .snoozed-note {
+  color: #614d26;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: pre-wrap;
 }
 .snoozed-row > .subtle-button {
   flex-shrink: 0;

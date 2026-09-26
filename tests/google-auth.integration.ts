@@ -52,6 +52,7 @@ before(async () => {
     "012_snoozed.sql",
     "013_plans.sql",
     "014_gmail_source_links.sql",
+    "015_package_notes.sql",
   ])
     await query(await readFile("db/" + file, "utf8"));
   keys = await generateKeyPair("RS256");
@@ -772,6 +773,7 @@ test("native bearer isolation, Origin separation, revocation and atomic manual c
   assert.equal((await nativeCall("google/disconnect", {}, token)).status, 403);
   const input = {
     merchant: "Native fixture",
+    note: "Gift for Alex",
     orderNumber: null,
     orderedAt: null,
     items: [{ name: "Notebook", quantity: 1, imageUrl: null }],
@@ -879,7 +881,11 @@ test("native bearer isolation, Origin separation, revocation and atomic manual c
   const target = await (
     await nativeCall(
       "shipments",
-      { ...input, merchant: "Retained native fixture" },
+      {
+        ...input,
+        merchant: "Retained native fixture",
+        note: "Keep near front door",
+      },
       token,
       { "idempotency-key": randomToken() },
     )
@@ -898,6 +904,7 @@ test("native bearer isolation, Origin separation, revocation and atomic manual c
     await nativeCall(`shipments/${target.id}`, undefined, token)
   ).json();
   assert.equal(retained.shipment.merchant, "Retained native fixture");
+  assert.equal(retained.shipment.note, "Keep near front door\n\nGift for Alex");
   assert.ok(retained.emails.some((e: { id: string }) => e.id === source.id));
   const mergedDashboard = await (
     await nativeCall("dashboard", undefined, token)

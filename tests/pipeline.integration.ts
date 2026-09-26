@@ -72,6 +72,7 @@ before(async () => {
     "012_snoozed.sql",
     "013_plans.sql",
     "014_gmail_source_links.sql",
+    "015_package_notes.sql",
   ])
     await query(await readFile("db/" + file, "utf8"));
   const [h] = await query(
@@ -302,6 +303,39 @@ test("manual edits enforce household ownership and reject duplicate tracking", a
     /not found/,
   );
   await assert.rejects(saveManual(payload, ctx), /already in your household/);
+});
+test("household package notes survive edits and can be cleared", async () => {
+  const input = {
+    merchant: `Note fixture ${randomUUID()}`,
+    orderNumber: null,
+    orderedAt: null,
+    items: [{ name: "Lamp", quantity: 1, imageUrl: null }],
+    carrier: null,
+    trackingNumber: null,
+    trackingUrl: null,
+    status: "ordered" as const,
+    shippedAt: null,
+    estimate: null,
+    deliveredAt: null,
+  };
+  const id = await saveManual(
+    { ...input, note: "  Blue lamp for the guest room  " },
+    ctx,
+  );
+  assert.equal(
+    (await shipment(id, ctx.householdId)).shipment.note,
+    "Blue lamp for the guest room",
+  );
+  await saveManual(input, ctx, id);
+  assert.equal(
+    (await shipment(id, ctx.householdId)).shipment.note,
+    "Blue lamp for the guest room",
+  );
+  await saveManual({ ...input, note: null }, ctx, id);
+  assert.equal((await shipment(id, ctx.householdId)).shipment.note, null);
+  await assert.rejects(
+    saveManual({ ...input, note: "x".repeat(1001) }, ctx, id),
+  );
 });
 test("durable queue claims once and reclaims an expired lease", async () => {
   await query("UPDATE jobs SET status='done'");

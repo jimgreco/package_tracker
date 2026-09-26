@@ -487,6 +487,19 @@ async function handle(
           if (rows.length !== 2) throw new AppError("Package not found.", 404);
           const source = rows.find((r) => r.id === id)!;
           const target = rows.find((r) => r.id === targetId)!;
+          if (source.note && source.note !== target.note) {
+            const note = [target.note, source.note]
+              .filter(Boolean)
+              .join("\n\n");
+            if (note.length > 1000)
+              throw new AppError(
+                "Combined notes are too long. Shorten a note before merging.",
+              );
+            await c.query(
+              "UPDATE shipments SET note=$2,updated_at=now(),version=version+1 WHERE id=$1",
+              [targetId, note],
+            );
+          }
           if (source.collected_at && target.status !== "delivered")
             throw new AppError(
               "Keep the delivered package as the merge destination to preserve its collection record.",

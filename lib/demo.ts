@@ -92,6 +92,7 @@ export function demoShipments(): Shipment[] {
     orderNumber: r.number,
     orderedAt: date(r.ordered),
     items: [{ name: r.name, quantity: 1, imageUrl: null }],
+    note: null,
     carrier: r.carrier,
     trackingNumber: r.track,
     trackingUrl: null,

@@ -15,23 +15,36 @@ final class ModelTests: XCTestCase {
     value.status = "carrier_custom_state"
     let unknown = try JSONDecoder().decode(Shipment.self, from: JSONEncoder().encode(value))
     XCTAssertEqual(PackageStatus.label(unknown.status), "Carrier Custom State")
+    value.note = "Blue lamp for the guest room"
+    let noted = try JSONDecoder().decode(Shipment.self, from: JSONEncoder().encode(value))
+    XCTAssertEqual(noted.note, "Blue lamp for the guest room")
+    XCTAssertTrue(noted.matchesSearch("guest room"))
+    let payload = try JSONSerialization.jsonObject(with: ManualPackage(noted).payload()) as! [String: Any]
+    XCTAssertEqual(payload["note"] as? String, "Blue lamp for the guest room")
   }
   func testFilterParitySearchAndStableTimeline() {
     let shipments = Fixture.dashboard().shipments
     XCTAssertEqual(PackageFilter.all.results(shipments).count, 3)
     XCTAssertEqual(PackageFilter.onTheWay.results(shipments).count, 2)
-    XCTAssertEqual(PackageFilter.attention.results(shipments).count, 1)
+    XCTAssertEqual(shipments.filter(PackageFilter.needsAttention).count, 1)
     XCTAssertEqual(PackageFilter.delivered.results(shipments).count, 1)
     XCTAssertEqual(PackageFilter.dismissed.results(shipments).count, 1)
-    var snoozed = shipments[1]
+    XCTAssertTrue(PackageFilter.isActive(shipments[0]))
+    XCTAssertFalse(PackageFilter.isActive(shipments[1]))
+    XCTAssertFalse(PackageFilter.isActive(shipments[3]))
+    var snoozed = shipments[0]
     snoozed.snoozedAt = "2026-09-19T12:00:00Z"
     XCTAssertFalse(PackageFilter.all.includes(snoozed))
     XCTAssertFalse(PackageFilter.onTheWay.includes(snoozed))
+    XCTAssertTrue(PackageFilter.isActive(snoozed))
     XCTAssertEqual(PackageFilter.all.results(shipments, search: "700100").count, 2)
     XCTAssertEqual(PackageFilter.all.results(shipments, search: "capsules").count, 1)
     var noTracking = shipments[0]
     noTracking.trackingNumber = nil
-    XCTAssertFalse(PackageFilter.attention.includes(noTracking))
+    XCTAssertFalse(PackageFilter.needsAttention(noTracking))
+    noTracking.status = "unknown"
+    noTracking.needsReview = true
+    XCTAssertTrue(PackageFilter.onTheWay.includes(noTracking))
     var updated = shipments[1]
     updated.updatedAt = "2099-01-01T00:00:00Z"
     XCTAssertEqual(
@@ -46,10 +59,12 @@ final class ModelTests: XCTestCase {
       now: Fixture.clock)
     XCTAssertEqual(sections.deliveredToday.map(\.merchant), ["Cometeer"])
     XCTAssertEqual(sections.expectedToday.map(\.merchant), ["Schoolhouse"])
-    XCTAssertEqual(sections.remaining.map(\.merchant), ["Muji"])
+    XCTAssertEqual(sections.attention.map(\.merchant), ["Muji"])
+    XCTAssertTrue(sections.remaining.isEmpty)
     XCTAssertEqual(sections.snoozed.map(\.merchant), ["Snoozed parcel"])
     XCTAssertEqual(
-      Set((sections.deliveredToday + sections.expectedToday + sections.remaining + sections.snoozed)
+      Set((sections.deliveredToday + sections.expectedToday + sections.attention
+        + sections.remaining + sections.snoozed)
         .map(\.id)).count, 4)
 
     let searched = PackageHomeSections(
@@ -57,11 +72,13 @@ final class ModelTests: XCTestCase {
       now: Fixture.clock)
     XCTAssertEqual(searched.deliveredToday.map(\.merchant), ["Cometeer"])
     XCTAssertTrue(searched.expectedToday.isEmpty)
+    XCTAssertTrue(searched.attention.isEmpty)
     XCTAssertTrue(searched.remaining.isEmpty)
     let deliveredFilter = PackageHomeSections(
       shipments: shipments, filter: .delivered, search: "", zone: "America/New_York",
       now: Fixture.clock)
     XCTAssertTrue(deliveredFilter.deliveredToday.isEmpty)
+    XCTAssertTrue(deliveredFilter.attention.isEmpty)
     XCTAssertEqual(deliveredFilter.remaining.map(\.merchant), ["Cometeer"])
 
     var lateDelivery = shipments[1]

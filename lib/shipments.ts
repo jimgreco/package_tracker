@@ -28,6 +28,7 @@ export function mapShipment(r: Record<string, unknown>): Shipment {
     orderNumber: r.order_number as string | null,
     orderedAt: iso(r.ordered_at)?.slice(0, 10) || null,
     items: r.items as Shipment["items"],
+    note: (r.note as string | null) ?? null,
     carrier: r.carrier as string | null,
     trackingNumber: r.tracking_number as string | null,
     trackingUrl: r.tracking_url as string | null,
@@ -462,19 +463,20 @@ export async function saveManual(
       v.deliveredAt,
       !!v.manualOverride,
       state,
+      v.note === undefined ? (existing?.note ?? null) : v.note,
     ];
     let saved;
     if (id) {
       saved = (
         await c.query(
-          `UPDATE shipments SET collected_at=CASE WHEN $5='delivered' THEN collected_at ELSE NULL END,collected_by=CASE WHEN $5='delivered' THEN collected_by ELSE NULL END,collected_by_name=CASE WHEN $5='delivered' THEN collected_by_name ELSE NULL END,items=$1,carrier=$2,tracking_number=$3,tracking_url=$4,status=$5,shipped_at=$6,estimate=$7,delivered_at=$8,manual_override=$9,tracking_state=CASE WHEN $12 THEN $10 ELSE tracking_state END,tracker_id=CASE WHEN $12 THEN NULL ELSE tracker_id END,needs_review=false,review_reason=NULL,updated_at=now(),status_at=now(),estimate_at=now(),version=version+1 WHERE id=$11 RETURNING *`,
+          `UPDATE shipments SET collected_at=CASE WHEN $5='delivered' THEN collected_at ELSE NULL END,collected_by=CASE WHEN $5='delivered' THEN collected_by ELSE NULL END,collected_by_name=CASE WHEN $5='delivered' THEN collected_by_name ELSE NULL END,items=$1,carrier=$2,tracking_number=$3,tracking_url=$4,status=$5,shipped_at=$6,estimate=$7,delivered_at=$8,manual_override=$9,tracking_state=CASE WHEN $13 THEN $10 ELSE tracking_state END,tracker_id=CASE WHEN $13 THEN NULL ELSE tracker_id END,note=$11,needs_review=false,review_reason=NULL,updated_at=now(),status_at=now(),estimate_at=now(),version=version+1 WHERE id=$12 RETURNING *`,
           [...params, id, !!trackingChanged],
         )
       ).rows[0];
     } else {
       saved = (
         await c.query(
-          `INSERT INTO shipments(items,carrier,tracking_number,tracking_url,status,shipped_at,estimate,delivered_at,manual_override,tracking_state,household_id,order_id,is_demo,estimate_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,now()) RETURNING *`,
+          `INSERT INTO shipments(items,carrier,tracking_number,tracking_url,status,shipped_at,estimate,delivered_at,manual_override,tracking_state,note,household_id,order_id,is_demo,estimate_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,now()) RETURNING *`,
           [...params, ctx.householdId, orderId, ctx.demo],
         )
       ).rows[0];
