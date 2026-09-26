@@ -71,6 +71,7 @@ before(async () => {
     "011_native_calendar.sql",
     "012_snoozed.sql",
     "013_plans.sql",
+    "014_gmail_source_links.sql",
   ])
     await query(await readFile("db/" + file, "utf8"));
   const [h] = await query(
@@ -565,6 +566,7 @@ test("Postmark endpoint verifies its secret, routes a private alias and deduplic
     From: "shop@example.invalid",
     Subject: "Package shipped",
     TextBody: "Your package TRACKHTTP has shipped.",
+    Headers: [{ Name: "Message-ID", Value: "<forwarded@example.invalid>" }],
     OriginalRecipient: `packages+${ctx.forwardingToken}@inbound.example.invalid`,
   };
   function request(body: unknown, auth = true) {
@@ -628,6 +630,17 @@ test("Postmark endpoint verifies its secret, routes a private alias and deduplic
   const b = await second.json();
   assert.equal(a.id, b.id);
   assert.equal(b.duplicate, true);
+  const [saved] = await query(
+    "SELECT message_key,rfc822_message_id FROM source_emails WHERE id=$1",
+    [a.id],
+  );
+  assert.equal(saved.message_key, "http-postmark");
+  assert.equal(saved.rfc822_message_id, "<forwarded@example.invalid>");
+  assert.equal(
+    (await emails(ctx.householdId)).find((email) => email.id === a.id)
+      ?.appleMailUrl,
+    "message://%3Cforwarded%40example.invalid%3E",
+  );
 });
 test("inline email product images persist and remain household-private", async () => {
   const png = Buffer.from(

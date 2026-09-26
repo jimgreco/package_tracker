@@ -1434,6 +1434,21 @@ export default function Page() {
                 timeZone: data?.settings.timeZone,
               })}
             </p>
+            {email.gmailUrl && (
+              <a
+                className="secondary"
+                href={email.gmailUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Open in Gmail <ExternalLink size={16} />
+              </a>
+            )}
+            {email.appleMailUrl && (
+              <a className="secondary" href={email.appleMailUrl}>
+                Open in Apple Mail <ExternalLink size={16} />
+              </a>
+            )}
             {email.error && <div className="form-error">{email.error}</div>}
             <pre className="email-text">{email.text}</pre>
             {email.extraction != null && (

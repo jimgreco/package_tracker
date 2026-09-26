@@ -84,6 +84,8 @@ export type Email = {
   error: string | null;
   text?: string;
   extraction?: unknown;
+  gmailUrl?: string | null;
+  appleMailUrl?: string | null;
 };
 export type Settings = {
   plan: "free" | "paid";

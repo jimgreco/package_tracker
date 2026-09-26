@@ -51,6 +51,7 @@ before(async () => {
     "011_native_calendar.sql",
     "012_snoozed.sql",
     "013_plans.sql",
+    "014_gmail_source_links.sql",
   ])
     await query(await readFile("db/" + file, "utf8"));
   keys = await generateKeyPair("RS256");

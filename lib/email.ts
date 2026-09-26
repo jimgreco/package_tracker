@@ -70,6 +70,9 @@ export const postmarkSchema = z.object({
   OriginalRecipient: z.string().optional(),
   To: z.string().optional(),
   ToFull: z.array(z.object({ Email: z.string() })).optional(),
+  Headers: z
+    .array(z.object({ Name: z.string(), Value: z.string() }))
+    .optional(),
   Attachments: z
     .array(
       z.object({
@@ -92,6 +95,8 @@ export async function receiveEmail(
     html: string;
     sentAt?: string;
     source?: "Gmail" | "Forwarded email";
+    gmailAccountEmail?: string;
+    rfc822MessageId?: string;
     attachments?: z.infer<typeof postmarkSchema>["Attachments"];
   },
   client?: PoolClient,
@@ -131,7 +136,7 @@ export async function receiveEmail(
       .filter((i) => i.url.startsWith("/api/assets/") || !!safeUrl(i.url));
     const [email] = (
       await c.query(
-        `INSERT INTO source_emails(household_id,message_key,subject,sender,sent_at,body_text,body_html,links,images,source) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+        `INSERT INTO source_emails(household_id,message_key,subject,sender,sent_at,body_text,body_html,links,images,source,gmail_account_email,rfc822_message_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
         [
           householdId,
           key,
@@ -143,6 +148,8 @@ export async function receiveEmail(
           JSON.stringify(clean.links),
           JSON.stringify(clean.images),
           input.source || "Forwarded email",
+          input.source === "Gmail" ? input.gmailAccountEmail || null : null,
+          input.rfc822MessageId?.slice(0, 500) || null,
         ],
       )
     ).rows;

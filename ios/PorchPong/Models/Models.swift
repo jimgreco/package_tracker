@@ -162,6 +162,8 @@ struct SourceEmail: Codable, Identifiable, Sendable {
   var text: String?
   var receivedAt: String
   var sentAt: String?
+  var gmailUrl: String? = nil
+  var appleMailUrl: String? = nil
 }
 struct ExtractionSummary: Codable, Sendable {
   var relevant: Bool?
@@ -177,6 +179,8 @@ struct InboxEmail: Codable, Identifiable, Sendable {
   var from: String
   var receivedAt: String
   var sentAt: String?
+  var gmailUrl: String? = nil
+  var appleMailUrl: String? = nil
   var status: String
   var error: String?
   var text: String?

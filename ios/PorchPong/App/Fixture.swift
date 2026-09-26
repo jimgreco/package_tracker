@@ -84,7 +84,10 @@
           InboxEmail(
             id: "50000000-0000-0000-0000-000000000001", subject: "Your Cometeer delivery arrived",
             from: "orders@example.test", receivedAt: "2026-09-19T15:00:00Z",
-            sentAt: "2026-09-18T15:00:00Z", status: "processed",
+            sentAt: "2026-09-18T15:00:00Z",
+            gmailUrl: "https://mail.google.com/mail/#search/rfc822msgid%3Afixture%40example.test",
+            appleMailUrl: "message://%3Cfixture%40example.test%3E",
+            status: "processed",
             text:
               "Your order T700100 has been delivered. This synthetic email is used only for local app verification.",
             shipments: [PackageReference(id: shipment().id, merchant: "Cometeer")]),
@@ -110,7 +113,10 @@
           SourceEmail(
             id: "email-\(index)", subject: subject, from: "orders@example.test",
             text: "Synthetic source \(index + 1) for order \(index < 2 ? "700100" : "T700100").",
-            receivedAt: "2026-09-19T15:00:00Z", sentAt: "2026-09-\(14 + index)T12:00:00Z")
+            receivedAt: "2026-09-19T15:00:00Z", sentAt: "2026-09-\(14 + index)T12:00:00Z",
+            gmailUrl: index == 0
+              ? "https://mail.google.com/mail/#search/rfc822msgid%3Afixture%40example.test" : nil,
+            appleMailUrl: index < 2 ? "message://%3Cfixture%40example.test%3E" : nil)
         })
     }
     @MainActor static func makeStore() -> AppStore {

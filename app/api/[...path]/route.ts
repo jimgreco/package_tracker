@@ -45,6 +45,11 @@ import {
 } from "@/lib/shipments";
 import { calendarFeed } from "@/lib/calendar";
 import { postmarkSchema, receiveEmail } from "@/lib/email";
+import {
+  appleMailSourceUrl,
+  gmailAccountsFor,
+  gmailSourceUrl,
+} from "@/lib/mail-source-link";
 import { trackingWebhook } from "@/lib/tracking";
 import { trackingConfigured } from "@/lib/tracking-config";
 import { adminAccounts, requirePaid, setHouseholdPlan } from "@/lib/plans";
@@ -146,6 +151,9 @@ async function handle(
       return json(
         await receiveEmail(household.id, {
           messageId: payload.MessageID,
+          rfc822MessageId: payload.Headers?.find(
+            (entry) => entry.Name.toLowerCase() === "message-id",
+          )?.Value,
           from: payload.From,
           subject: payload.Subject,
           text: payload.TextBody,
@@ -551,7 +559,11 @@ async function handle(
         [id, ctx.householdId],
       );
       if (!email) throw new AppError("Email not found.", 404);
-      if (path.length === 2 && method === "GET")
+      if (path.length === 2 && method === "GET") {
+        const accounts =
+          email.source === "Gmail"
+            ? await gmailAccountsFor(ctx.householdId)
+            : new Map<string, string>();
         return json({
           id: email.id,
           subject: email.subject,
@@ -562,11 +574,14 @@ async function handle(
           status: email.status,
           error: email.error,
           extraction: email.extraction,
+          gmailUrl: gmailSourceUrl(email, accounts),
+          appleMailUrl: appleMailSourceUrl(email),
           shipments: await query(
             "SELECT s.id,o.merchant FROM shipment_emails se JOIN shipments s ON s.id=se.shipment_id JOIN orders o ON o.id=s.order_id WHERE se.email_id=$1 AND s.household_id=$2 AND s.archived_at IS NULL ORDER BY s.created_at DESC",
             [id, ctx.householdId],
           ),
         });
+      }
       if (path[2] === "retry" && method === "POST") {
         requireReal(ctx);
         if (!process.env.OPENAI_API_KEY)

@@ -303,6 +303,8 @@ import XCTest
     screenshot("inbox")
     app.staticTexts["Your Cometeer delivery arrived"].tap()
     XCTAssertTrue(app.staticTexts["Original sent date"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Open in Gmail"].exists)
+    XCTAssertTrue(app.buttons["Open in Apple Mail"].exists)
     screenshot("email-detail")
     app.tabBars.buttons["Settings"].tap()
     XCTAssertTrue(app.staticTexts["sample@example.test"].firstMatch.waitForExistence(timeout: 5))

@@ -191,6 +191,16 @@ struct SourceEmailView: View {
         LabeledContent(
           "Original sent date", value: Dates.timestamp(email.sentAt, zone: store.timeZone))
         LabeledContent("Imported", value: Dates.timestamp(email.receivedAt, zone: store.timeZone))
+        if let gmailUrl = email.gmailUrl, let url = URL(string: gmailUrl) {
+          Link(destination: url) {
+            Label("Open in Gmail", systemImage: "arrow.up.right.square")
+          }
+        }
+        if let appleMailUrl = email.appleMailUrl, let url = URL(string: appleMailUrl) {
+          Link(destination: url) {
+            Label("Open in Apple Mail", systemImage: "arrow.up.right.square")
+          }
+        }
       }
       Section("Original email") {
         Text(email.text ?? "No readable text is available.").textSelection(.enabled)

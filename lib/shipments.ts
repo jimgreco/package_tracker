@@ -11,6 +11,11 @@ import { AppError, origin, safeUrl, hash } from "./security";
 import { manualSchema } from "./validation";
 import { normalizeEstimate, validZone } from "./calendar";
 import { gmailAvailable } from "./gmail";
+import {
+  appleMailSourceUrl,
+  gmailAccountsFor,
+  gmailSourceUrl,
+} from "./mail-source-link";
 import { trackingConfigured } from "./tracking-config";
 import { attentionReasons } from "./attention";
 const iso = (d: unknown) =>
@@ -162,9 +167,12 @@ export async function settings(ctx: Context): Promise<Settings> {
 }
 export async function emails(householdId: string): Promise<Email[]> {
   const rows = await query(
-    "SELECT id,subject,sender,sent_at,received_at,status,error FROM source_emails WHERE household_id=$1 AND status<>'ignored' ORDER BY coalesce(sent_at,received_at) DESC,id DESC LIMIT 100",
+    "SELECT id,subject,sender,sent_at,received_at,status,error,source,message_key,gmail_account_email,rfc822_message_id FROM source_emails WHERE household_id=$1 AND status<>'ignored' ORDER BY coalesce(sent_at,received_at) DESC,id DESC LIMIT 100",
     [householdId],
   );
+  const accounts = rows.some((r) => r.source === "Gmail")
+    ? await gmailAccountsFor(householdId)
+    : new Map<string, string>();
   return rows.map((r) => ({
     id: r.id,
     subject: r.subject,
@@ -173,6 +181,8 @@ export async function emails(householdId: string): Promise<Email[]> {
     sentAt: iso(r.sent_at),
     status: r.status,
     error: r.error,
+    gmailUrl: gmailSourceUrl(r, accounts),
+    appleMailUrl: appleMailSourceUrl(r),
   }));
 }
 export async function dashboard(ctx: Context): Promise<DashboardData> {
@@ -198,9 +208,12 @@ export async function detail(id: string, ctx: Context) {
     source: r.source,
   }));
   const sources = await query(
-    "SELECT e.id,e.subject,e.sender,e.body_text,e.sent_at,e.received_at,e.extraction FROM source_emails e JOIN shipment_emails se ON se.email_id=e.id WHERE se.shipment_id=$1 ORDER BY coalesce(e.sent_at,e.received_at) DESC,e.id DESC",
+    "SELECT e.id,e.subject,e.sender,e.body_text,e.sent_at,e.received_at,e.extraction,e.source,e.message_key,e.gmail_account_email,e.rfc822_message_id FROM source_emails e JOIN shipment_emails se ON se.email_id=e.id WHERE se.shipment_id=$1 ORDER BY coalesce(e.sent_at,e.received_at) DESC,e.id DESC",
     [id],
   );
+  const accounts = sources.some((r) => r.source === "Gmail")
+    ? await gmailAccountsFor(ctx.householdId)
+    : new Map<string, string>();
   return {
     shipment: s,
     events,
@@ -212,6 +225,8 @@ export async function detail(id: string, ctx: Context) {
       receivedAt: iso(r.received_at)!,
       sentAt: iso(r.sent_at),
       extraction: r.extraction,
+      gmailUrl: gmailSourceUrl(r, accounts),
+      appleMailUrl: appleMailSourceUrl(r),
     })),
   };
 }

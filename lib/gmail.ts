@@ -19,6 +19,7 @@ import { requirePaid } from "./plans";
 import {
   bodyParts,
   decodeMessage,
+  header,
   shippingQuery,
   type GmailMessage,
 } from "./gmail-message";
@@ -471,7 +472,16 @@ export async function syncGmail(connectionId: string, generation: string) {
         if (!current) return;
         const received = await receiveEmail(
           g.household_id,
-          { ...input, messageId: key, source: "Gmail" },
+          {
+            ...input,
+            messageId: key,
+            source: "Gmail",
+            gmailAccountEmail: g.email,
+            rfc822MessageId: header(message.payload, "Message-ID").slice(
+              0,
+              500,
+            ),
+          },
           c,
         );
         if (!received.duplicate)
@@ -479,6 +489,45 @@ export async function syncGmail(connectionId: string, generation: string) {
             "UPDATE gmail_connections SET imported_count=imported_count+1 WHERE id=$1",
             [connectionId],
           );
+      });
+    }
+    // Older imports kept the Gmail API ID but not the RFC Message-ID. Fill a
+    // small batch on each sync so they can also open in Apple Mail.
+    const prefix = `gmail:${hash(g.google_subject)}:`;
+    const older = await query(
+      `SELECT id,message_key FROM source_emails
+       WHERE household_id=$1 AND source='Gmail' AND message_key LIKE $2
+         AND rfc822_message_id IS NULL
+       ORDER BY received_at DESC LIMIT 10`,
+      [g.household_id, `${prefix}%`],
+    );
+    for (const source of older) {
+      if (Date.now() > deadline) break;
+      const id = String(source.message_key).slice(prefix.length);
+      if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) continue;
+      const message: GmailMessage | null = await gmailRequest(
+        token,
+        `messages/${encodeURIComponent(id)}?format=metadata&metadataHeaders=Message-ID`,
+      );
+      await transaction(async (c) => {
+        const [current] = (
+          await c.query(
+            `SELECT 1 FROM gmail_connections g JOIN households h ON h.id=g.household_id
+             WHERE g.id=$1 AND g.generation=$2 AND g.enabled=true AND h.plan='paid' FOR UPDATE OF g`,
+            [connectionId, generation],
+          )
+        ).rows;
+        if (!current) return;
+        await c.query(
+          `UPDATE source_emails SET rfc822_message_id=$3,gmail_account_email=$4
+           WHERE id=$1 AND household_id=$2 AND rfc822_message_id IS NULL`,
+          [
+            source.id,
+            g.household_id,
+            header(message?.payload, "Message-ID").slice(0, 500),
+            g.email,
+          ],
+        );
       });
     }
     await transaction(async (c) => {

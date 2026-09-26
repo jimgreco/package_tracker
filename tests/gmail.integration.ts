@@ -15,7 +15,7 @@ import {
   syncGmail,
 } from "../lib/gmail";
 import { schedule, runOne } from "../lib/jobs";
-import { settings } from "../lib/shipments";
+import { emails, settings } from "../lib/shipments";
 import { GET, POST } from "../app/api/[...path]/route";
 const appUrl = "http://127.0.0.1:4317";
 const dbUrl = new URL(process.env.DATABASE_URL!);
@@ -184,6 +184,7 @@ const message = (id: string, extra = {}) => ({
     headers: [
       { name: "subject", value: "Your order shipped" },
       { name: "from", value: "store@example.invalid" },
+      { name: "Message-ID", value: `<${id}@store.example.invalid>` },
     ],
     parts: [
       {
@@ -285,11 +286,51 @@ test("Gmail imports pages durably with preserved body and source, rejects pre-co
   );
   assert.equal(sources.length, 2);
   assert.equal(sources[0].source, "Gmail");
+  assert.equal(sources[0].gmail_account_email, ctx.email);
+  assert.match(
+    sources[0].rfc822_message_id,
+    /^<m[12]@store\.example\.invalid>$/,
+  );
+  const imported = await emails(ctx.householdId);
+  assert.equal(imported.length, 2);
+  for (const email of imported) {
+    const url = new URL(email.gmailUrl!);
+    assert.equal(url.origin, "https://mail.google.com");
+    assert.equal(url.searchParams.get("authuser"), ctx.email);
+    assert.match(
+      email.appleMailUrl!,
+      /^message:\/\/%3Cm[12]%40store\.example\.invalid%3E$/,
+    );
+    assert.match(
+      decodeURIComponent(url.hash),
+      /^#search\/rfc822msgid:m[12]@store\.example\.invalid$/,
+    );
+  }
+  await query(
+    "UPDATE source_emails SET gmail_account_email=NULL,rfc822_message_id=NULL WHERE id=$1",
+    [sources[0].id],
+  );
+  const historical = (await emails(ctx.householdId)).find(
+    (e) => e.id === sources[0].id,
+  )!;
+  assert.equal(
+    new URL(historical.gmailUrl!).searchParams.get("authuser"),
+    ctx.email,
+  );
+  assert.match(historical.gmailUrl!, /#all\/m[12]$/);
+  assert.equal(historical.appleMailUrl, null);
   assert.match(sources[0].body_text, /ABC123/);
   assert.equal(sources[0].images[0].url, "https://store.example/product.jpg");
   assert.ok((await connection()).last_synced_at);
   assert.equal((await connection()).imported_count, 2);
   await syncGmail(g.id, g.generation);
+  const restored = (await emails(ctx.householdId)).find(
+    (e) => e.id === sources[0].id,
+  )!;
+  assert.match(
+    restored.appleMailUrl!,
+    /^message:\/\/%3Cm[12]%40store\.example\.invalid%3E$/,
+  );
   await syncGmail(g.id, g.generation);
   sources = await query("SELECT * FROM source_emails WHERE household_id=$1", [
     ctx.householdId,
