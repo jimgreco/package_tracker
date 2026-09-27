@@ -7,6 +7,7 @@ private enum PackageDisplay: String, CaseIterable {
 
 struct PackagesView: View {
   @Environment(AppStore.self) private var store
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @State private var display = PackageDisplay.list
   @State private var filter = PackageFilter.onTheWay
   @State private var search = ""
@@ -121,13 +122,23 @@ struct PackagesView: View {
   }
 
   private func packageLink(_ shipment: Shipment) -> some View {
-    VStack(alignment: .leading, spacing: 8) {
-      NavigationLink {
-        PackageDetailView(id: shipment.id)
-      } label: {
-        PackageRow(shipment: shipment, showNote: false)
+    VStack(alignment: .leading, spacing: 0) {
+      if dynamicTypeSize.isAccessibilitySize {
+        packageNavigationLink(shipment)
+        PackageHomeNote(id: shipment.id, merchant: shipment.merchant, note: shipment.note)
+      } else {
+        HStack(spacing: 0) {
+          packageNavigationLink(shipment)
+          PackageHomeNote(id: shipment.id, merchant: shipment.merchant, note: shipment.note)
+        }
       }
-      PackageHomeNote(id: shipment.id, note: shipment.note)
+      if let note = shipment.note, !note.isEmpty {
+        Text(note)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+          .padding(.bottom, 8)
+      }
     }
     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
       if shipment.snoozedAt != nil {
@@ -156,6 +167,14 @@ struct PackagesView: View {
           .green
         ).disabled(!store.canWrite)
       }
+    }
+  }
+
+  private func packageNavigationLink(_ shipment: Shipment) -> some View {
+    NavigationLink {
+      PackageDetailView(id: shipment.id)
+    } label: {
+      PackageRow(shipment: shipment, showNote: false)
     }
   }
 }
@@ -195,81 +214,99 @@ struct PackageRow: View {
 }
 
 private struct PackageHomeNote: View {
-  @Environment(AppStore.self) private var store
   let id: String
+  let merchant: String
+  let note: String?
+  @State private var editing = false
+
+  var body: some View {
+    Button { editing = true } label: {
+      Label(note == nil ? "Add note" : "Edit note", systemImage: "pencil")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.borderless)
+    .accessibilityLabel("\(note == nil ? "Add" : "Edit") note for \(merchant)")
+    .accessibilityIdentifier("quickNoteButton-\(id)")
+    .sheet(isPresented: $editing) {
+      PackageHomeNoteEditor(id: id, merchant: merchant, note: note)
+    }
+  }
+}
+
+private struct PackageHomeNoteEditor: View {
+  @Environment(AppStore.self) private var store
+  @Environment(\.dismiss) private var dismiss
+  let id: String
+  let merchant: String
   let note: String?
   @State private var draft: String
-  @State private var saved: String
   @State private var saving = false
   @State private var error: String?
   @FocusState private var focused: Bool
 
-  init(id: String, note: String?) {
+  init(id: String, merchant: String, note: String?) {
     self.id = id
+    self.merchant = merchant
     self.note = note
     _draft = State(initialValue: note ?? "")
-    _saved = State(initialValue: note ?? "")
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 4) {
-      Text("Your note").font(.caption.weight(.semibold))
-      TextField("Tap to add a note", text: $draft, axis: .vertical)
-        .lineLimit(1...4)
-        .focused($focused)
-        .accessibilityIdentifier("quickNoteField-\(id)")
-        .disabled(store.offline || store.session == nil)
-      if saving { Text("Saving…").font(.caption).foregroundStyle(.secondary) }
-      if let error {
-        HStack {
-          Text(error).font(.caption).foregroundStyle(.red)
-          Button("Retry") { Task { await save() } }.disabled(!store.canWrite)
+    NavigationStack {
+      Form {
+        Section("Your note") {
+          TextField("How you'll recognize this package", text: $draft, axis: .vertical)
+            .lineLimit(3...8)
+            .focused($focused)
+            .accessibilityIdentifier("quickNoteField-\(id)")
+            .task {
+              try? await Task.sleep(for: .milliseconds(300))
+              if !Task.isCancelled { focused = true }
+            }
+          Text("Optional, up to 1,000 characters.")
+            .font(.caption).foregroundStyle(.secondary)
+        }
+        if let error {
+          Section { Text(error).foregroundStyle(.red) }
+        }
+      }
+      .navigationTitle("Note for \(merchant)")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Cancel") { dismiss() }.disabled(saving)
+        }
+        ToolbarItem(placement: .confirmationAction) {
+          Button(saving ? "Saving…" : "Save") { Task { await save() } }
+            .disabled(saving || !store.canWrite)
+            .accessibilityIdentifier("saveQuickNote")
         }
       }
     }
-    .padding(9)
-    .background(Color.yellow.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
     .onChange(of: draft) { _, next in
       if next.count > 1000 { draft = String(next.prefix(1000)) }
       error = nil
     }
-    .onChange(of: focused) { wasFocused, isFocused in
-      if wasFocused && !isFocused { Task { await save() } }
-    }
-    .onChange(of: note) { _, current in
-      if !focused && !saving && draft == saved {
-        draft = current ?? ""
-        saved = current ?? ""
-      }
-    }
-    .onChange(of: store.canWrite) { _, available in
-      if available && error == nil { Task { await save() } }
-    }
-    .task(id: draft) {
-      do { try await Task.sleep(for: .milliseconds(800)) } catch { return }
-      if !Task.isCancelled && error == nil { Task { await save() } }
-    }
   }
 
   private func save() async {
-    guard !saving else { return }
     guard store.canWrite else { return }
     let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard trimmed != saved else { return }
+    guard trimmed != (note ?? "") else {
+      dismiss()
+      return
+    }
     saving = true
     defer { saving = false }
-    while true {
-      let next = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-      if next == saved { return }
-      do {
-        let body = try JSONEncoder().encode(QuickNoteRequest(note: next.isEmpty ? nil : next))
-        try await store.mutate("shipments/\(id)/note", method: "PATCH", body: body)
-        saved = next
-        error = nil
-      } catch {
-        self.error = store.friendly(error)
-        return
-      }
+    do {
+      let body = try JSONEncoder().encode(QuickNoteRequest(note: trimmed.isEmpty ? nil : trimmed))
+      try await store.mutate("shipments/\(id)/note", method: "PATCH", body: body)
+      dismiss()
+    } catch {
+      self.error = store.friendly(error)
     }
   }
 }

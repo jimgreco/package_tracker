@@ -1,95 +1,120 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "./components";
+
+import { useEffect, useRef, useState } from "react";
+import { Pencil } from "lucide-react";
+import { api, Modal } from "./components";
 
 export function QuickNote({
   id,
+  merchant,
   note,
   onSaved,
 }: {
   id: string;
+  merchant: string;
   note: string | null;
   onSaved: (id: string, note: string | null) => void;
 }) {
-  const [draft, setDraft] = useState(note || "");
-  const [saved, setSaved] = useState(note || "");
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const savingRef = useRef(false);
-
-  const save = useCallback(
-    async (value: string) => {
-      const next = value.trim();
-      if (savingRef.current || next === saved) return;
-      savingRef.current = true;
-      setSaving(true);
-      setError("");
-      try {
-        const result = await api<{ note: string | null }>(
-          `shipments/${id}/note`,
-          { note: next || null },
-          "PATCH",
-        );
-        setSaved(result.note || "");
-        onSaved(id, result.note);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Could not save your note.");
-      } finally {
-        savingRef.current = false;
-        setSaving(false);
-      }
-    },
-    [id, onSaved, saved],
-  );
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    if (saving || error || draft.trim() === saved) return;
-    const timer = setTimeout(() => void save(draft), 800);
-    return () => clearTimeout(timer);
-  }, [draft, saved, saving, error, save]);
+    if (!editing) return;
+    const frame = requestAnimationFrame(() => textareaRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [editing]);
 
-  useEffect(() => {
-    const current = note || "";
-    if (!saving && !error && draft.trim() === saved && current !== saved) {
-      setDraft(current);
-      setSaved(current);
+  function open() {
+    setDraft(note || "");
+    setError("");
+    setEditing(true);
+  }
+
+  async function save() {
+    if (saving) return;
+    const next = draft.trim();
+    if (next === (note || "")) {
+      setEditing(false);
+      return;
     }
-  }, [note, draft, saved, saving, error]);
+    setSaving(true);
+    setError("");
+    try {
+      const result = await api<{ note: string | null }>(
+        `shipments/${id}/note`,
+        { note: next || null },
+        "PATCH",
+      );
+      onSaved(id, result.note);
+      setEditing(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save your note.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
-    <div className="package-note-editor">
-      <label htmlFor={`note-${id}`}>Your note</label>
-      <textarea
-        id={`note-${id}`}
-        aria-label="Your note"
-        placeholder="Click to add a note"
-        maxLength={1000}
-        rows={1}
-        value={draft}
-        onChange={(e) => {
-          setDraft(e.target.value);
-          setError("");
-        }}
-        onBlur={() => void save(draft)}
-      />
-      <span className="package-note-status" role="status">
-        {saving
-          ? "Saving…"
-          : error
-            ? "Could not save"
-            : draft.trim() !== saved
-              ? "Saving soon…"
-              : ""}
-      </span>
-      {error && (
-        <button
-          type="button"
-          className="subtle-button"
-          onClick={() => void save(draft)}
+    <>
+      <button
+        type="button"
+        className="package-note-trigger"
+        aria-label={`${note ? "Edit" : "Add"} note for ${merchant}`}
+        title={`${note ? "Edit" : "Add"} note for ${merchant}`}
+        onClick={open}
+      >
+        <Pencil size={15} aria-hidden="true" />
+        {note ? "Edit note" : "Add note"}
+      </button>
+      {editing && (
+        <Modal
+          title={`Note for ${merchant}`}
+          onClose={() => !saving && setEditing(false)}
         >
-          Retry
-        </button>
+          <div className="package-note-form">
+            <label htmlFor={`quick-note-${id}`}>Your note</label>
+            <textarea
+              ref={textareaRef}
+              id={`quick-note-${id}`}
+              maxLength={1000}
+              rows={5}
+              placeholder="How you'll recognize this package"
+              value={draft}
+              onChange={(event) => {
+                setDraft(event.target.value);
+                setError("");
+              }}
+            />
+            <p>Optional, up to 1,000 characters.</p>
+            {error && (
+              <p className="form-error" role="alert">
+                {error}
+              </p>
+            )}
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="secondary"
+                disabled={saving}
+                onClick={() => setEditing(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="primary"
+                disabled={saving}
+                onClick={() => void save()}
+              >
+                {saving ? "Saving…" : "Save note"}
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
-    </div>
+    </>
   );
 }

@@ -633,11 +633,11 @@ export default function Page() {
                                     size={19}
                                   />
                                 </button>
-                                <QuickNote
-                                  id={s.id}
-                                  note={s.note}
-                                  onSaved={noteSaved}
-                                />
+                                {s.note && (
+                                  <p className="package-note-preview">
+                                    {s.note}
+                                  </p>
+                                )}
                                 <div className="package-quick-actions">
                                   <span>
                                     {s.firstEmailAt &&
@@ -650,6 +650,12 @@ export default function Page() {
                                     )}
                                   </span>
                                   <div>
+                                    <QuickNote
+                                      id={s.id}
+                                      merchant={s.merchant}
+                                      note={s.note}
+                                      onSaved={noteSaved}
+                                    />
                                     {s.dismissedAt ? (
                                       <button
                                         className="subtle-button"
@@ -920,9 +926,11 @@ export default function Page() {
                             </button>
                             <QuickNote
                               id={s.id}
+                              merchant={s.merchant}
                               note={s.note}
                               onSaved={noteSaved}
                             />
+                            {s.note && <p className="snoozed-note">{s.note}</p>}
                           </div>
                         ))}
                         {!visibleSnoozed.length && (

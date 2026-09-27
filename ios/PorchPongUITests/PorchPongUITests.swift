@@ -262,12 +262,15 @@ import XCTest
     app.navigationBars["Package"].buttons["Packages"].tap()
     reveal(app.staticTexts["Snoozed"])
     XCTAssertTrue(app.staticTexts["Snoozed"].exists)
+    let snoozedPackage = app.staticTexts["Schoolhouse"]
+    reveal(snoozedPackage)
+    XCTAssertTrue(snoozedPackage.waitForExistence(timeout: 5))
     screenshot("snoozed-packages")
     let notification = app.staticTexts["Snoozed until the next email or tracking update."]
     let expired = XCTNSPredicateExpectation(
       predicate: NSPredicate(format: "exists == false"), object: notification)
     XCTAssertEqual(XCTWaiter.wait(for: [expired], timeout: 8), .completed)
-    app.staticTexts["Schoolhouse"].tap()
+    snoozedPackage.tap()
     reveal(app.buttons["Show package now"])
     app.buttons["Show package now"].tap()
     XCTAssertTrue(app.buttons["Snooze until next update"].waitForExistence(timeout: 5))
@@ -293,22 +296,26 @@ import XCTest
       .firstMatch
     reveal(package)
     XCTAssertTrue(package.waitForExistence(timeout: 5))
-    let savedNote = app.descendants(matching: .any).matching(
-      NSPredicate(format: "identifier BEGINSWITH %@ AND value == %@", "quickNoteField-", "Gift for Alex")
-    ).firstMatch
-    XCTAssertTrue(savedNote.waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Gift for Alex"].waitForExistence(timeout: 5))
     screenshot("created-package")
   }
   func testQuickNoteFromPackageList() {
     launch()
+    let edit = app.buttons["quickNoteButton-30000000-0000-0000-0000-000000000002"]
+    reveal(edit)
+    XCTAssertTrue(edit.waitForExistence(timeout: 5))
+    edit.tap()
     let note = app.descendants(matching: .any)["quickNoteField-30000000-0000-0000-0000-000000000002"]
-    reveal(note)
     XCTAssertTrue(note.waitForExistence(timeout: 5))
-    note.tap()
-    note.typeText("Leave behind the gate")
-    Thread.sleep(forTimeInterval: 1.5)
+    screenshot("quick-note-editor")
+    let noteText = "Leave behind the gate. If it does not fit, use the side entrance and call Alex."
+    note.typeText(noteText)
+    app.buttons["saveQuickNote"].tap()
+    XCTAssertTrue(app.staticTexts[noteText].waitForExistence(timeout: 5))
+    reveal(app.staticTexts[noteText])
+    screenshot("quick-note-list")
     app.staticTexts["Schoolhouse"].tap()
-    XCTAssertTrue(app.staticTexts["Leave behind the gate"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts[noteText].waitForExistence(timeout: 5))
     screenshot("quick-note-detail")
   }
   func testGoogleCalendarControls() {
