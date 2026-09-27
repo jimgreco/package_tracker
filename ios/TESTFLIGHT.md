@@ -8,9 +8,9 @@ management stays on the website.
 
 ## Release a tested commit
 
-1. Commit the intended source on `main` and run the complete simulator suite in
-   [README.md](README.md#build-and-automated-tests), including both iPhone sizes,
-   light/dark appearance, and accessibility. Keep the result bundles under ignored
+1. Commit the intended source on `main` and run the complete iPhone 17 Pro simulator
+   suite in [README.md](README.md#build-and-automated-tests), including light/dark
+   appearance and accessibility inspection. Keep the result bundles under ignored
    `output/ios/`. The SHA input below attests these local checks; CI does not repeat
    interactive simulator inspection.
 2. Run the backend checks in the same README and push the tested commit. Verify

@@ -44,19 +44,15 @@ xcodebuild -project ios/PorchPong.xcodeproj -scheme PorchPong -configuration Deb
   -destination 'platform=iOS Simulator,id=2399DE10-E7FA-4085-9A27-4BF05243023B' \
   -derivedDataPath ios/build -resultBundlePath output/ios/tests-iphone17pro.xcresult \
   test CODE_SIGNING_ALLOWED=NO
-xcrun simctl boot ADC134FF-52D5-47AB-B22D-51785ED07B81
-xcrun simctl ui ADC134FF-52D5-47AB-B22D-51785ED07B81 appearance dark
-xcodebuild -project ios/PorchPong.xcodeproj -scheme PorchPong -configuration Debug \
-  -destination 'platform=iOS Simulator,id=ADC134FF-52D5-47AB-B22D-51785ED07B81' \
-  -derivedDataPath ios/build -resultBundlePath output/ios/tests-iphone16e-dark.xcresult \
-  test CODE_SIGNING_ALLOWED=NO
 npm run typecheck
 npm test
 npm run test:integration
 npm run build
 ```
 
-Choose a new result bundle path for each run; Xcode does not overwrite one.
+Use the iPhone 17 Pro for the complete simulator suite and inspect the affected
+screens in light and dark appearance, including large accessibility text. Choose
+a new result bundle path for each run; Xcode does not overwrite one.
 Tests inject a clock and API. The backend uses unique local test databases and
 signed synthetic Google identities, never production email or paid providers.
 The existing pipeline fixtures cover the four-source `700100` / `T700100` sequence,

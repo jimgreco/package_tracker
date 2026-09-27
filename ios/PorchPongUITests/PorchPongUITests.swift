@@ -282,8 +282,10 @@ import XCTest
     app.textFields["merchantField"].typeText("Local bookstore")
     app.textFields["itemField0"].tap()
     app.textFields["itemField0"].typeText("Novel")
+    if app.keyboards.buttons["Return"].exists { app.keyboards.buttons["Return"].tap() }
     let note = app.descendants(matching: .any)["packageNoteField"]
-    reveal(note)
+    for _ in 0..<4 where !note.exists { app.swipeUp(velocity: .slow) }
+    XCTAssertTrue(note.waitForExistence(timeout: 3))
     note.tap()
     note.typeText("Gift for Alex")
     app.buttons["savePackage"].tap()
