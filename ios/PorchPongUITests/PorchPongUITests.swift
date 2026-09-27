@@ -293,8 +293,23 @@ import XCTest
       .firstMatch
     reveal(package)
     XCTAssertTrue(package.waitForExistence(timeout: 5))
-    XCTAssertTrue(package.label.contains("Your note: Gift for Alex"))
+    let savedNote = app.descendants(matching: .any).matching(
+      NSPredicate(format: "identifier BEGINSWITH %@ AND value == %@", "quickNoteField-", "Gift for Alex")
+    ).firstMatch
+    XCTAssertTrue(savedNote.waitForExistence(timeout: 5))
     screenshot("created-package")
+  }
+  func testQuickNoteFromPackageList() {
+    launch()
+    let note = app.descendants(matching: .any)["quickNoteField-30000000-0000-0000-0000-000000000002"]
+    reveal(note)
+    XCTAssertTrue(note.waitForExistence(timeout: 5))
+    note.tap()
+    note.typeText("Leave behind the gate")
+    Thread.sleep(forTimeInterval: 1.5)
+    app.staticTexts["Schoolhouse"].tap()
+    XCTAssertTrue(app.staticTexts["Leave behind the gate"].waitForExistence(timeout: 5))
+    screenshot("quick-note-detail")
   }
   func testGoogleCalendarControls() {
     launch()

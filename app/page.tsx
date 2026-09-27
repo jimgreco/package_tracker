@@ -50,6 +50,7 @@ import {
   api,
 } from "./components";
 import { CalendarView, InboxView, SettingsView } from "./views";
+import { QuickNote } from "./quick-note";
 type Detail = { shipment: Shipment; events: TrackingEvent[]; emails: Email[] };
 type View = "packages" | "calendar" | "inbox" | "settings";
 export default function Page() {
@@ -76,6 +77,18 @@ export default function Page() {
     (message: string, error = false) => setToast({ message, error }),
     [],
   );
+  const noteSaved = useCallback((id: string, note: string | null) => {
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            shipments: current.shipments.map((s) =>
+              s.id === id ? { ...s, note } : s,
+            ),
+          }
+        : current,
+    );
+  }, []);
   const reload = useCallback(async () => {
     try {
       const next = await api<DashboardData>("dashboard");
@@ -553,12 +566,6 @@ export default function Page() {
                                         .join(", ") ||
                                         "Item details not available"}
                                     </p>
-                                    {s.note && (
-                                      <p className="package-note">
-                                        <strong>Your note</strong>
-                                        {s.note}
-                                      </p>
-                                    )}
                                     {s.collectedAt && (
                                       <p>
                                         Collected by{" "}
@@ -626,6 +633,11 @@ export default function Page() {
                                     size={19}
                                   />
                                 </button>
+                                <QuickNote
+                                  id={s.id}
+                                  note={s.note}
+                                  onSaved={noteSaved}
+                                />
                                 <div className="package-quick-actions">
                                   <span>
                                     {s.firstEmailAt &&
@@ -898,11 +910,6 @@ export default function Page() {
                                 {s.items.map((i) => i.name).join(", ") ||
                                   STATUS_LABEL[s.status]}
                               </span>
-                              {s.note && (
-                                <span className="snoozed-note">
-                                  Your note: {s.note}
-                                </span>
-                              )}
                             </button>
                             <button
                               className="subtle-button"
@@ -911,6 +918,11 @@ export default function Page() {
                             >
                               Show now
                             </button>
+                            <QuickNote
+                              id={s.id}
+                              note={s.note}
+                              onSaved={noteSaved}
+                            />
                           </div>
                         ))}
                         {!visibleSnoozed.length && (

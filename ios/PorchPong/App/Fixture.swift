@@ -1,6 +1,10 @@
 #if DEBUG
   import Foundation
 
+  private struct FixtureNote: Decodable {
+    let note: String?
+  }
+
   enum Fixture {
     static let household = "10000000-0000-0000-0000-000000000001"
     static let user = "20000000-0000-0000-0000-000000000001"
@@ -178,6 +182,12 @@
           return try JSONEncoder().encode(Fixture.detail(s))
         }
         if parts.count == 3, let index = value.shipments.firstIndex(where: { $0.id == parts[1] }) {
+          if parts[2] == "note", method == "PATCH", let body {
+            let payload = try JSONDecoder().decode(FixtureNote.self, from: body)
+            value.shipments[index].note = payload.note
+            writes += 1
+            return Data(#"{"ok":true}"#.utf8)
+          }
           if parts[2] == "dismiss" { value.shipments[index].dismissedAt = "2026-09-19T16:00:00Z" }
           if parts[2] == "restore" { value.shipments[index].dismissedAt = nil }
           if parts[2] == "snooze" { value.shipments[index].snoozedAt = "2026-09-19T16:00:00Z" }

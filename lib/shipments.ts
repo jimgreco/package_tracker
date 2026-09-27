@@ -8,7 +8,7 @@ import type {
 } from "./types";
 import type { Context } from "./auth";
 import { AppError, origin, safeUrl, hash } from "./security";
-import { manualSchema } from "./validation";
+import { manualSchema, noteSchema } from "./validation";
 import { normalizeEstimate, validZone } from "./calendar";
 import { gmailAvailable } from "./gmail";
 import {
@@ -230,6 +230,19 @@ export async function detail(id: string, ctx: Context) {
       appleMailUrl: appleMailSourceUrl(r),
     })),
   };
+}
+export async function updateShipmentNote(
+  id: string,
+  ctx: Context,
+  input: unknown,
+) {
+  const note = noteSchema.parse(input) || null;
+  const rows = await query(
+    "UPDATE shipments SET note=$3,updated_at=now(),version=version+1 WHERE id=$1 AND household_id=$2 AND archived_at IS NULL RETURNING id",
+    [id, ctx.householdId, note],
+  );
+  if (!rows[0]) throw new AppError("Package not found.", 404);
+  return note;
 }
 export async function quickShipmentAction(
   id: string,

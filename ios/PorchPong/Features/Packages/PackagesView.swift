@@ -109,17 +109,7 @@ struct PackagesView: View {
         Section("Snoozed") {
           Text("Hidden from the main list until a new email or tracking update arrives.")
             .font(.footnote).foregroundStyle(.secondary)
-          ForEach(sections.snoozed) { shipment in
-            NavigationLink {
-              PackageDetailView(id: shipment.id)
-            } label: {
-              PackageRow(shipment: shipment)
-            }
-            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-              Button("Show now") { Task { await store.action(shipment, "unsnooze") } }
-                .tint(.porchPong).disabled(!store.canWrite)
-            }
-          }
+          ForEach(sections.snoozed) { shipment in packageLink(shipment) }
         }
       }
     }
@@ -131,13 +121,19 @@ struct PackagesView: View {
   }
 
   private func packageLink(_ shipment: Shipment) -> some View {
-    NavigationLink {
-      PackageDetailView(id: shipment.id)
-    } label: {
-      PackageRow(shipment: shipment)
+    VStack(alignment: .leading, spacing: 8) {
+      NavigationLink {
+        PackageDetailView(id: shipment.id)
+      } label: {
+        PackageRow(shipment: shipment, showNote: false)
+      }
+      PackageHomeNote(id: shipment.id, note: shipment.note)
     }
     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-      if shipment.dismissedAt != nil {
+      if shipment.snoozedAt != nil {
+        Button("Show now") { Task { await store.action(shipment, "unsnooze") } }
+          .tint(.porchPong).disabled(!store.canWrite)
+      } else if shipment.dismissedAt != nil {
         Button("Restore") { Task { await store.action(shipment, "restore") } }.tint(.porchPong)
           .disabled(!store.canWrite)
       } else {
@@ -166,13 +162,14 @@ struct PackagesView: View {
 struct PackageRow: View {
   @Environment(AppStore.self) private var store
   let shipment: Shipment
+  var showNote = true
   var body: some View {
     HStack(alignment: .top, spacing: 13) {
       AuthenticatedThumbnail(path: shipment.items.first?.imageUrl)
       VStack(alignment: .leading, spacing: 4) {
         Text(shipment.merchant).font(.headline)
         Text(shipment.summary).font(.subheadline).foregroundStyle(.secondary)
-        if let note = shipment.note, !note.isEmpty {
+        if showNote, let note = shipment.note, !note.isEmpty {
           Text("Your note: \(note)")
             .font(.subheadline)
             .foregroundStyle(.primary)
@@ -194,5 +191,98 @@ struct PackageRow: View {
         }
       }
     }.padding(.vertical, 8).accessibilityElement(children: .combine)
+  }
+}
+
+private struct PackageHomeNote: View {
+  @Environment(AppStore.self) private var store
+  let id: String
+  let note: String?
+  @State private var draft: String
+  @State private var saved: String
+  @State private var saving = false
+  @State private var error: String?
+  @FocusState private var focused: Bool
+
+  init(id: String, note: String?) {
+    self.id = id
+    self.note = note
+    _draft = State(initialValue: note ?? "")
+    _saved = State(initialValue: note ?? "")
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 4) {
+      Text("Your note").font(.caption.weight(.semibold))
+      TextField("Tap to add a note", text: $draft, axis: .vertical)
+        .lineLimit(1...4)
+        .focused($focused)
+        .accessibilityIdentifier("quickNoteField-\(id)")
+        .disabled(store.offline || store.session == nil)
+      if saving { Text("Saving…").font(.caption).foregroundStyle(.secondary) }
+      if let error {
+        HStack {
+          Text(error).font(.caption).foregroundStyle(.red)
+          Button("Retry") { Task { await save() } }.disabled(!store.canWrite)
+        }
+      }
+    }
+    .padding(9)
+    .background(Color.yellow.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+    .onChange(of: draft) { _, next in
+      if next.count > 1000 { draft = String(next.prefix(1000)) }
+      error = nil
+    }
+    .onChange(of: focused) { wasFocused, isFocused in
+      if wasFocused && !isFocused { Task { await save() } }
+    }
+    .onChange(of: note) { _, current in
+      if !focused && !saving && draft == saved {
+        draft = current ?? ""
+        saved = current ?? ""
+      }
+    }
+    .onChange(of: store.canWrite) { _, available in
+      if available && error == nil { Task { await save() } }
+    }
+    .task(id: draft) {
+      do { try await Task.sleep(for: .milliseconds(800)) } catch { return }
+      if !Task.isCancelled && error == nil { Task { await save() } }
+    }
+  }
+
+  private func save() async {
+    guard !saving else { return }
+    guard store.canWrite else { return }
+    let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard trimmed != saved else { return }
+    saving = true
+    defer { saving = false }
+    while true {
+      let next = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+      if next == saved { return }
+      do {
+        let body = try JSONEncoder().encode(QuickNoteRequest(note: next.isEmpty ? nil : next))
+        try await store.mutate("shipments/\(id)/note", method: "PATCH", body: body)
+        saved = next
+        error = nil
+      } catch {
+        self.error = store.friendly(error)
+        return
+      }
+    }
+  }
+}
+
+private struct QuickNoteRequest: Encodable {
+  let note: String?
+  private enum CodingKeys: String, CodingKey { case note }
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    if let note {
+      try container.encode(note, forKey: .note)
+    } else {
+      try container.encodeNil(forKey: .note)
+    }
   }
 }

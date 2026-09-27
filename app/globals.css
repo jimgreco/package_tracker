@@ -556,19 +556,6 @@ h1 > span {
   overflow: hidden;
   white-space: nowrap;
 }
-.shipment-main > .package-note {
-  background: #fff9e9;
-  border-radius: 7px;
-  color: #614d26;
-  line-height: 1.45;
-  margin-top: 9px;
-  overflow: visible;
-  overflow-wrap: anywhere;
-  padding: 8px 10px;
-  text-overflow: clip;
-  white-space: pre-wrap;
-}
-.package-note strong,
 .package-detail-note strong {
   display: block;
   font-size: 11px;
@@ -2680,21 +2667,70 @@ footer {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.snoozed-row .snoozed-note {
-  color: #614d26;
-  overflow: visible;
-  overflow-wrap: anywhere;
-  text-overflow: clip;
-  white-space: pre-wrap;
-}
 .snoozed-row > .subtle-button {
   flex-shrink: 0;
+}
+.snoozed-row {
+  flex-wrap: wrap;
+}
+.snoozed-row .package-note-editor {
+  flex-basis: 100%;
+  border: 0;
+  padding: 0;
 }
 .shipment-entry {
   min-width: 0;
 }
 .shipment-entry .shipment-card {
   border-radius: 13px 13px 0 0;
+}
+.package-note-editor {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 5px 10px;
+  padding: 9px 16px;
+  border: 1px solid var(--line);
+  border-top: 0;
+  background: #fff9e9;
+}
+.package-note-editor label {
+  color: #614d26;
+  font-size: 11px;
+  font-weight: 700;
+}
+.package-note-editor textarea {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-height: 36px;
+  max-height: 160px;
+  field-sizing: content;
+  resize: vertical;
+  border: 1px solid #e8d9af;
+  border-radius: 6px;
+  background: #fff;
+  padding: 7px 9px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.package-note-editor textarea:focus {
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
+}
+.package-note-editor textarea::placeholder {
+  color: #958970;
+}
+.package-note-status {
+  min-height: 14px;
+  color: #7e704f;
+  font-size: 11px;
+}
+.package-note-editor > .subtle-button {
+  justify-self: end;
+  padding: 0;
+  font-size: 11px;
 }
 .package-quick-actions {
   display: flex;

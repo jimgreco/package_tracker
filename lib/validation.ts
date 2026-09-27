@@ -16,13 +16,14 @@ export const itemSchema = z
     imageUrl: z.string().max(2000).nullable(),
   })
   .strict();
+export const noteSchema = z.string().trim().max(1000).nullable();
 export const manualSchema = z
   .object({
     merchant: z.string().trim().min(1).max(160),
     orderNumber: z.string().trim().max(200).nullable(),
     orderedAt: z.iso.date().nullable(),
     items: z.array(itemSchema).min(1).max(100),
-    note: z.string().trim().max(1000).nullable().optional(),
+    note: noteSchema.optional(),
     carrier: z.string().trim().max(80).nullable(),
     trackingNumber: z.string().trim().max(200).nullable(),
     trackingUrl: z.string().max(2000).nullable(),

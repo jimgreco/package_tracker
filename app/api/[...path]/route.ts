@@ -38,6 +38,7 @@ import {
   dashboard,
   detail,
   saveManual,
+  updateShipmentNote,
   quickShipmentAction,
   shipments,
   shipment,
@@ -62,6 +63,7 @@ import {
 } from "@/lib/google-auth";
 import { addMember, removeMember, switchHousehold } from "@/lib/households";
 import { asset } from "@/lib/storage";
+import { noteSchema } from "@/lib/validation";
 import {
   gmailStart,
   gmailCallback,
@@ -420,6 +422,13 @@ async function handle(
         return json(await detail(id, ctx));
       if (path.length === 2 && method === "PATCH")
         return json({ id: await saveManual(await jsonBody(req), ctx, id) });
+      if (path.length === 3 && path[2] === "note" && method === "PATCH") {
+        const { note } = z
+          .object({ note: noteSchema })
+          .strict()
+          .parse(await jsonBody(req, 4096));
+        return json({ note: await updateShipmentNote(id, ctx, note) });
+      }
       if (
         path.length === 3 &&
         [

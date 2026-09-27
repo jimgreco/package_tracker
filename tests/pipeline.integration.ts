@@ -15,6 +15,7 @@ import {
   shipments,
   emails,
   shipment,
+  updateShipmentNote,
   quickShipmentAction,
 } from "../lib/shipments";
 import { calendarFields } from "../lib/calendar";
@@ -336,6 +337,58 @@ test("household package notes survive edits and can be cleared", async () => {
   await assert.rejects(
     saveManual({ ...input, note: "x".repeat(1001) }, ctx, id),
   );
+});
+test("quick note updates only the household package note", async () => {
+  const id = await saveManual(
+    {
+      merchant: `Quick note fixture ${randomUUID()}`,
+      orderNumber: null,
+      orderedAt: null,
+      items: [{ name: "Lamp", quantity: 1, imageUrl: null }],
+      carrier: null,
+      trackingNumber: null,
+      trackingUrl: null,
+      status: "ordered",
+      shippedAt: null,
+      estimate: null,
+      deliveredAt: null,
+      note: null,
+    },
+    ctx,
+  );
+  const [before] = await query(
+    "SELECT status,status_at,estimate_at,manual_override,version FROM shipments WHERE id=$1",
+    [id],
+  );
+  assert.equal(
+    await updateShipmentNote(id, ctx, "  Leave behind the side gate  "),
+    "Leave behind the side gate",
+  );
+  assert.equal(
+    (await shipment(id, ctx.householdId)).shipment.note,
+    "Leave behind the side gate",
+  );
+  const [after] = await query(
+    "SELECT status,status_at,estimate_at,manual_override,version FROM shipments WHERE id=$1",
+    [id],
+  );
+  assert.deepEqual(
+    [after.status, after.status_at, after.estimate_at, after.manual_override],
+    [
+      before.status,
+      before.status_at,
+      before.estimate_at,
+      before.manual_override,
+    ],
+  );
+  assert.equal(after.version, before.version + 1);
+  await assert.rejects(
+    updateShipmentNote(id, { ...ctx, householdId: randomUUID() }, "Other"),
+    /not found/,
+  );
+  await assert.rejects(updateShipmentNote(id, ctx, "x".repeat(1001)));
+  assert.equal(await updateShipmentNote(id, ctx, null), null);
+  assert.equal((await shipment(id, ctx.householdId)).shipment.note, null);
 });
 test("durable queue claims once and reclaims an expired lease", async () => {
   await query("UPDATE jobs SET status='done'");
