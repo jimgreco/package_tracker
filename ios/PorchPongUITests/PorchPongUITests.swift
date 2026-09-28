@@ -304,6 +304,7 @@ import XCTest
     let edit = app.buttons["quickNoteButton-30000000-0000-0000-0000-000000000002"]
     reveal(edit)
     XCTAssertTrue(edit.waitForExistence(timeout: 5))
+    XCTAssertGreaterThanOrEqual(edit.frame.minY, app.staticTexts["Order SH-20916"].frame.maxY)
     edit.tap()
     let note = app.descendants(matching: .any)["quickNoteField-30000000-0000-0000-0000-000000000002"]
     XCTAssertTrue(note.waitForExistence(timeout: 5))
@@ -313,6 +314,7 @@ import XCTest
     app.buttons["saveQuickNote"].tap()
     XCTAssertTrue(app.staticTexts[noteText].waitForExistence(timeout: 5))
     reveal(app.staticTexts[noteText])
+    XCTAssertGreaterThanOrEqual(edit.frame.minY, app.staticTexts[noteText].frame.maxY)
     screenshot("quick-note-list")
     app.staticTexts["Schoolhouse"].tap()
     XCTAssertTrue(app.staticTexts[noteText].waitForExistence(timeout: 5))

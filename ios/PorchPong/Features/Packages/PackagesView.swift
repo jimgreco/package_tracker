@@ -7,7 +7,6 @@ private enum PackageDisplay: String, CaseIterable {
 
 struct PackagesView: View {
   @Environment(AppStore.self) private var store
-  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @State private var display = PackageDisplay.list
   @State private var filter = PackageFilter.onTheWay
   @State private var search = ""
@@ -123,15 +122,7 @@ struct PackagesView: View {
 
   private func packageLink(_ shipment: Shipment) -> some View {
     VStack(alignment: .leading, spacing: 0) {
-      if dynamicTypeSize.isAccessibilitySize {
-        packageNavigationLink(shipment)
-        PackageHomeNote(id: shipment.id, merchant: shipment.merchant, note: shipment.note)
-      } else {
-        HStack(spacing: 0) {
-          packageNavigationLink(shipment)
-          PackageHomeNote(id: shipment.id, merchant: shipment.merchant, note: shipment.note)
-        }
-      }
+      packageNavigationLink(shipment)
       if let note = shipment.note, !note.isEmpty {
         Text(note)
           .font(.caption)
@@ -139,6 +130,7 @@ struct PackagesView: View {
           .fixedSize(horizontal: false, vertical: true)
           .padding(.bottom, 8)
       }
+      PackageHomeNote(id: shipment.id, merchant: shipment.merchant, note: shipment.note)
     }
     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
       if shipment.snoozedAt != nil {
