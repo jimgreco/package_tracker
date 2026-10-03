@@ -7,8 +7,9 @@ image=${2:?Expected versioned image}
 cd "$HOME/deploy"
 exec 9>"$HOME/doorstep/deploy.lock"
 flock -w 300 9
-export DOCKER_CONFIG="$HOME/doorstep/.docker"
-trap 'rm -f "$DOCKER_CONFIG/config.json"' EXIT
+# Reuse the host's existing registry access; application releases never copy
+# registry credentials to the shared host.
+export DOCKER_CONFIG="${DOCKER_CONFIG:-$HOME/.docker}"
 export COMPOSE_PROFILES=doorstep
 export DOORSTEP_IMAGE="$image"
 compose() { docker-compose -f docker-compose.yml "$@"; }
@@ -16,36 +17,33 @@ compose() { docker-compose -f docker-compose.yml "$@"; }
 compose config --services | grep -x doorstep >/dev/null
 python3 - <<'PY'
 from pathlib import Path
-import secrets,os
+import re
 p=Path('.env')
-lines=p.read_text().splitlines() if p.exists() else []
+if not p.is_file():
+ raise SystemExit('Existing deployment .env is required; provisioning is separate')
+lines=p.read_text().splitlines()
 values=dict(line.split('=',1) for line in lines if '=' in line and not line.startswith('#'))
 for key in ['DOORSTEP_DB_PASSWORD','DOORSTEP_ENCRYPTION_KEY']:
- if not values.get(key):
-  lines=[x for x in lines if not x.startswith(key+'=')]
-  lines.append(key+'='+secrets.token_hex(32))
-p.write_text('\n'.join(lines)+'\n'); os.chmod(p,0o600)
+ if not re.fullmatch(r'[0-9a-f]{64}', values.get(key,'')):
+  raise SystemExit(key+' must already be configured as 64 hexadecimal characters')
 PY
-password=$(awk -F= '$1=="DOORSTEP_DB_PASSWORD" { sub(/^[^=]*=/,""); print; exit }' .env)
-[[ "$password" =~ ^[0-9a-f]{64}$ ]] || { echo "DOORSTEP_DB_PASSWORD must be 64 hex characters"; exit 1; }
 compose config --quiet
 # The shared database is already running. Do not recreate unrelated services.
 docker exec shared_db pg_isready -U admin >/dev/null
-printf '%s\n' "SELECT 'CREATE ROLE doorstep_app LOGIN' WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='doorstep_app')\gexec" \
-  "ALTER ROLE doorstep_app LOGIN PASSWORD '$password';" \
-  "SELECT 'CREATE DATABASE doorstep OWNER doorstep_app' WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname='doorstep')\gexec" \
-  | docker exec -i shared_db psql -U admin -d postgres -v ON_ERROR_STOP=1 >/dev/null
-# Reclaim only old PorchPong images with no containers before pulling a release.
-# Keep the pinned image even if its containers are temporarily stopped.
-pinned_image=$(awk -F= '$1=="DOORSTEP_IMAGE" { sub(/^[^=]*=/,""); print; exit }' .env)
-running_images=$(docker ps -a --format '{{.Image}}')
-while IFS= read -r previous_image; do
-  [[ "$previous_image" == ghcr.io/jimgreco/package_tracker:* ]] || continue
-  [[ "$previous_image" == "$image" || "$previous_image" == "$pinned_image" ]] && continue
-  if grep -Fxq "$previous_image" <<< "$running_images"; then continue; fi
-  docker image rm "$previous_image"
-done < <(docker image ls --format '{{.Repository}}:{{.Tag}}')
+# Preserve all previous images for operator-controlled rollback. Pull and check
+# existing application database access before creating an interruption.
 compose pull doorstep doorstep-worker
+compose run --rm --no-deps -T doorstep node --input-type=module -e 'import pg from "pg";const p=new pg.Pool({connectionString:process.env.DATABASE_URL});try{await p.query("SELECT 1")}finally{await p.end()}' </dev/null
+# Stop both old processes before migration: old Calendar workers do not enforce
+# the generation/membership fence. Do not automatically restart old code after a
+# successful forward-only migration. A failed release requires a compatible image.
+for service in doorstep doorstep-worker; do
+  container=$(compose ps -q "$service")
+  if [ -n "$container" ]; then
+    docker inspect --format '{{.Name}} previous image: {{.Config.Image}} ({{.Image}})' "$container"
+  fi
+done
+compose stop --timeout 120 doorstep doorstep-worker
 compose run --rm --no-deps -T doorstep ./node_modules/.bin/tsx scripts/migrate.ts </dev/null
 compose up -d --no-deps --no-build doorstep doorstep-worker
 for service in doorstep doorstep-worker; do

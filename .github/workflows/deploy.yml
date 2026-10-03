@@ -86,14 +86,12 @@ jobs:
           printf '%s\n' "$EC2_SSH_KEY" > "$HOME/.ssh/doorstep"
           printf '%s\n' "$EC2_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/doorstep" "$HOME/.ssh/known_hosts"
-      - name: Transfer deployment script and temporary registry login
+      - name: Transfer deployment script
         run: |
           set -euo pipefail
           remote="$EC2_USER@$EC2_HOST"
-          ssh -i "$HOME/.ssh/doorstep" -o StrictHostKeyChecking=yes "$remote" 'install -d -m 700 "$HOME/doorstep/.docker"'
+          ssh -i "$HOME/.ssh/doorstep" -o StrictHostKeyChecking=yes "$remote" 'install -d -m 700 "$HOME/doorstep"'
           scp -i "$HOME/.ssh/doorstep" -o StrictHostKeyChecking=yes scripts/deploy-ec2.sh "$remote:doorstep/deploy-ec2.sh"
-          scp -i "$HOME/.ssh/doorstep" -o StrictHostKeyChecking=yes "$HOME/.docker/config.json" "$remote:doorstep/.docker/config.json"
-          ssh -i "$HOME/.ssh/doorstep" -o StrictHostKeyChecking=yes "$remote" 'chmod 600 "$HOME/doorstep/.docker/config.json"'
       - name: Migrate and deploy through consolidated Compose
         run: |
           set -euo pipefail
@@ -107,9 +105,3 @@ jobs:
           node -e 'const h=JSON.parse(require("fs").readFileSync(process.argv[1])); if(h.status!=="ok"||h.database!=="ready"||h.build!==process.env.GITHUB_SHA) process.exit(1); console.log("Public PorchPong release verified:",h.build)' "$RUNNER_TEMP/doorstep-health.json"
           curl --fail --silent --show-error "$PRODUCTION_BASE_URL/" -o "$RUNNER_TEMP/doorstep-home.html"
           grep -q 'PorchPong' "$RUNNER_TEMP/doorstep-home.html"
-      - name: Remove temporary registry login
-        if: always()
-        run: |
-          if [ -f "$HOME/.ssh/doorstep" ]; then
-            ssh -i "$HOME/.ssh/doorstep" -o StrictHostKeyChecking=yes "$EC2_USER@$EC2_HOST" 'rm -f "$HOME/doorstep/.docker/config.json"' || true
-          fi

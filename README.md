@@ -180,7 +180,7 @@ Repository deployment secrets: `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`, and `EC2_K
 - `https://porchpong.com/api/google/callback`
 - `https://porchpong.com/api/gmail/callback`
 
-The `doorstep` Compose profile keeps application release pins separate from unrelated infrastructure pushes. `scripts/deploy-ec2.sh` generates database/encryption secrets once, creates the dedicated `doorstep` database owned by `doorstep_app`, and persists a healthy `DOORSTEP_IMAGE` pin. It never restarts the shared database or other applications. Nginx Proxy Manager routes the hostname to `doorstep:4317`.
+The `doorstep` Compose profile keeps application release pins separate from unrelated infrastructure pushes. `scripts/deploy-ec2.sh` requires the existing database/encryption configuration and database access, and persists a healthy `DOORSTEP_IMAGE` pin. Provisioning and credential changes are separate operations. The host must already be able to pull the versioned image, either publicly or with its existing Docker registry access; the workflow does not copy registry credentials to it. Pull and database preflight run before stopping only `doorstep` and `doorstep-worker`, then migrations run before both updated processes start. This causes a brief PorchPong interruption. It never restarts the shared database or other applications, and preserves all previous images. Nginx Proxy Manager routes the hostname to `doorstep:4317`.
 
 Back up the `doorstep` database, the `deploy_doorstep_uploads` volume, and the encryption key together. For a compatible rollback, rerun the deployment script with a previously published full commit SHA and its matching image after authenticating Docker to GHCR. Migrations are forward-only; do not roll back application code across an incompatible schema change.
 
@@ -318,7 +318,10 @@ Disconnect invalidates pending Calendar consent, including token exchanges alrea
 in progress. Workers recheck the connection generation before exporting. An export
 already in progress finishes before disconnect or member removal commits; previously
 exported Google events remain in Google. Apply the migration before starting updated
-web and worker processes together. No new OAuth scope is required.
+web and worker processes together, after stopping both old processes. Do not roll
+back to code older than the complete audited release after enabling these access
+revocation guarantees; the older workers do not enforce them. No new OAuth scope
+is required.
 
 Migration `017_gmail_consent_cancellation.sql` keeps Gmail reconnect attempts
 cancelable during their token exchange. Pause, disconnect, and plan downgrade
