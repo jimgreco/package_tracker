@@ -72,6 +72,20 @@ export async function removeMember(ctx: Context, input: unknown) {
     if (!member) throw new AppError("Household member not found.", 404);
     if (member.role === "owner")
       throw new AppError("The household owner cannot be removed.");
+    // A copied feed is a bearer credential. Removal must stop future exports,
+    // including older Calendar grants whose authorizing member is unknown.
+    await c.query("UPDATE households SET feed_token=$2 WHERE id=$1", [
+      ctx.householdId,
+      randomToken(),
+    ]);
+    await c.query(
+      "DELETE FROM oauth_states WHERE household_id=$1 AND user_id=$2",
+      [ctx.householdId, value.userId],
+    );
+    await c.query(
+      "DELETE FROM google_connections WHERE household_id=$1 AND (connected_by=$2 OR connected_by IS NULL)",
+      [ctx.householdId, value.userId],
+    );
     await c.query(
       "DELETE FROM household_members WHERE household_id=$1 AND user_id=$2",
       [ctx.householdId, value.userId],

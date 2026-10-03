@@ -56,7 +56,7 @@ export async function googleCallback(
   const state = url.searchParams.get("state");
   if (!state) throw new AppError("Missing Google authorization state.");
   const [saved] = await query(
-    "DELETE FROM oauth_states WHERE state_hash=$1 AND user_id=$2 AND household_id=$3 AND expires_at>now() RETURNING verifier",
+    "UPDATE oauth_states SET claimed_at=now() WHERE state_hash=$1 AND user_id=$2 AND household_id=$3 AND expires_at>now() AND claimed_at IS NULL RETURNING verifier",
     [hash(state), ctx.userId, ctx.householdId],
   );
   if (!saved)
@@ -79,9 +79,26 @@ export async function googleCallback(
     throw new AppError("Calendar access was not granted.");
   // Preserve an existing connection instead of silently orphaning its calendar on reconnect.
   await transaction(async (c) => {
+    // Token exchange can outlive household removal or a household switch.
+    // Lock membership before consent/connection rows, matching removal's order.
+    const membership = await c.query(
+      `SELECT m.user_id FROM household_members m JOIN users u ON u.id=m.user_id
+       WHERE m.household_id=$1 AND m.user_id=$2 AND u.household_id=m.household_id FOR SHARE OF m,u`,
+      [ctx.householdId, ctx.userId],
+    );
+    if (!membership.rows.length)
+      throw new AppError("Your household access changed. Connect again.", 403);
     await c.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
       `google:${ctx.householdId}`,
     ]);
+    const consent = await c.query(
+      "SELECT state_hash FROM oauth_states WHERE state_hash=$1 AND user_id=$2 AND household_id=$3 AND expires_at>now() AND claimed_at IS NOT NULL FOR SHARE",
+      [hash(state), ctx.userId, ctx.householdId],
+    );
+    if (!consent.rows.length)
+      throw new AppError(
+        "Google authorization expired or was disconnected. Connect again.",
+      );
     if (nativeAttemptId) {
       const valid = await c.query(
         `SELECT n.id FROM native_calendar_attempts n JOIN native_sessions s ON s.token_hash=n.session_hash AND s.expires_at>now()
@@ -116,9 +133,17 @@ export async function googleCallback(
         );
     }
     await c.query(
-      `INSERT INTO google_connections(household_id,refresh_token,generation) VALUES($1,$2,$3) ON CONFLICT(household_id) DO UPDATE SET refresh_token=EXCLUDED.refresh_token,error=NULL`,
-      [ctx.householdId, encrypt(result.refresh_token!), randomToken()],
+      `INSERT INTO google_connections(household_id,refresh_token,generation,connected_by) VALUES($1,$2,$3,$4) ON CONFLICT(household_id) DO UPDATE SET refresh_token=EXCLUDED.refresh_token,generation=EXCLUDED.generation,connected_by=EXCLUDED.connected_by,error=NULL`,
+      [
+        ctx.householdId,
+        encrypt(result.refresh_token!),
+        randomToken(),
+        ctx.userId,
+      ],
     );
+    await c.query("DELETE FROM oauth_states WHERE state_hash=$1", [
+      hash(state),
+    ]);
     await enqueue(
       "google_all",
       { householdId: ctx.householdId },
@@ -227,6 +252,14 @@ export async function syncShipment(id: string) {
   if (!connection) return;
   // Serialize updates for this shipment so delayed jobs cannot overwrite newer calendar data.
   await transaction(async (c) => {
+    // A token obtained before disconnect/reconnect must not keep exporting.
+    // Hold this lock through the provider write so disconnect/removal waits
+    // for an already-running export and no export can start after it commits.
+    const active = await c.query(
+      "SELECT household_id FROM google_connections WHERE household_id=$1 AND generation=$2 FOR SHARE",
+      [initial.row.household_id, connection.generation],
+    );
+    if (!active.rows.length) return;
     const [row] = (
       await c.query(
         "SELECT s.*,o.merchant,o.order_number,o.ordered_at,h.time_zone FROM shipments s JOIN orders o ON o.id=s.order_id JOIN households h ON h.id=s.household_id WHERE s.id=$1 FOR UPDATE OF s",
@@ -315,6 +348,9 @@ export async function disconnectGoogle(ctx: Context) {
   await transaction(async (c) => {
     await c.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
       `google:${ctx.householdId}`,
+    ]);
+    await c.query("DELETE FROM oauth_states WHERE household_id=$1", [
+      ctx.householdId,
     ]);
     await c.query(
       "DELETE FROM native_calendar_attempts WHERE household_id=$1",

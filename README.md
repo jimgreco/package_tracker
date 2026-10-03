@@ -300,3 +300,22 @@ disconnect invalidate pending authorization. Gmail remains website-managed.
 Validate real consent on an iPhone, then confirm a delivery appears in the
 Google calendar. Mocked provider and simulator tests cannot establish live
 Google-consent acceptance.
+
+### Calendar access when household membership changes
+
+Removing an existing household member rotates the private ICS feed link. Remaining
+subscribers must use the new link in Settings. Cancelling a pending invitation
+does not rotate it. Previously downloaded events cannot be recalled.
+
+Migration `016_calendar_membership.sql` records which member authorizes each new
+or reconnected Google Calendar connection. Removing that member disconnects future
+exports. A connection attributed to a remaining member stays connected. Older
+connections have unknown ownership and are disconnected on the next member removal;
+a remaining member can reconnect using the existing calendar's Google account.
+Migration alone does not disconnect existing grants or change their provider permissions.
+
+Disconnect invalidates pending Calendar consent, including token exchanges already
+in progress. Workers recheck the connection generation before exporting. An export
+already in progress finishes before disconnect or member removal commits; previously
+exported Google events remain in Google. Apply the migration before starting updated
+web and worker processes together. No new OAuth scope is required.
