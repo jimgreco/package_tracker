@@ -99,6 +99,13 @@ export async function safeImageDownload(
     req.setTimeout(12_000, () =>
       req.destroy(new Error("Image download timed out.")),
     );
+    // Socket activity resets setTimeout. Bound the whole request too so a
+    // slowly streaming email image cannot monopolize the shared job worker.
+    const deadline = setTimeout(
+      () => req.destroy(new Error("Image download timed out.")),
+      12_000,
+    );
+    req.once("close", () => clearTimeout(deadline));
     req.on("error", reject);
   });
   return "redirect" in result
