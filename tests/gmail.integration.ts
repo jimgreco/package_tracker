@@ -562,3 +562,53 @@ test("Free household plan blocks Gmail connection and background ingestion", asy
     ]);
   }
 });
+
+for (const action of ["pause", "disconnect"] as const) {
+  test(`Gmail ${action} during token exchange cancels an in-flight reconnect`, async () => {
+    await query("DELETE FROM rate_limits WHERE key=ANY($1::text[])", [
+      [`gmail-connect:${ctx.userId}`, `gmail-action:${ctx.userId}`],
+    ]);
+    const initial = await attempt();
+    await gmailCallback(ctx, await callback(initial));
+    const reconnect = await attempt();
+    const req = await callback(reconnect);
+    const providerFetch = globalThis.fetch;
+    globalThis.fetch = async (input, options) => {
+      const response = await providerFetch(input, options);
+      if (String(input) === "https://oauth2.googleapis.com/token")
+        await gmailAction(ctx, action);
+      return response;
+    };
+    try {
+      await assert.rejects(() => gmailCallback(ctx, req));
+      const current = await connection();
+      if (action === "pause") assert.equal(current.enabled, false);
+      else assert.equal(current, undefined);
+    } finally {
+      globalThis.fetch = providerFetch;
+    }
+  });
+}
+
+test("Gmail token exchange cannot activate a connection after plan downgrade", async () => {
+  const reconnect = await attempt();
+  const req = await callback(reconnect);
+  const providerFetch = globalThis.fetch;
+  globalThis.fetch = async (input, options) => {
+    const response = await providerFetch(input, options);
+    if (String(input) === "https://oauth2.googleapis.com/token")
+      await query("UPDATE households SET plan='free' WHERE id=$1", [
+        ctx.householdId,
+      ]);
+    return response;
+  };
+  try {
+    await assert.rejects(() => gmailCallback(ctx, req));
+    assert.equal(await connection(), undefined);
+  } finally {
+    globalThis.fetch = providerFetch;
+    await query("UPDATE households SET plan='paid' WHERE id=$1", [
+      ctx.householdId,
+    ]);
+  }
+});

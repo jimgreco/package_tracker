@@ -148,7 +148,7 @@ export async function gmailCallback(ctx: Context, req: Request) {
       "Gmail connection expired or started in another browser. Please try again.",
     );
   const [attempt] = await query(
-    `DELETE FROM gmail_oauth_states WHERE state_hash=$1 AND browser_hash=$2 AND user_id=$3 AND household_id=$4 AND expires_at>now() RETURNING *`,
+    `UPDATE gmail_oauth_states SET claimed_at=now() WHERE state_hash=$1 AND browser_hash=$2 AND user_id=$3 AND household_id=$4 AND expires_at>now() AND claimed_at IS NULL RETURNING *`,
     [hash(state), hash(browser), ctx.userId, ctx.householdId],
   );
   if (!attempt)
@@ -214,6 +214,23 @@ export async function gmailCallback(ctx: Context, req: Request) {
         "Connect the same Google account you use to sign in to PorchPong.",
         403,
       );
+    // Pause/disconnect can happen while Google is exchanging the code. Keep
+    // consent cancelable until commit and serialize plan changes with saving.
+    const [home] = (
+      await c.query("SELECT plan FROM households WHERE id=$1 FOR SHARE", [
+        ctx.householdId,
+      ])
+    ).rows;
+    if (home?.plan !== "paid")
+      throw new AppError("Gmail is not enabled for this household.", 403);
+    const consent = await c.query(
+      "SELECT state_hash FROM gmail_oauth_states WHERE state_hash=$1 AND user_id=$2 AND household_id=$3 AND expires_at>now() AND claimed_at IS NOT NULL FOR SHARE",
+      [hash(state), ctx.userId, ctx.householdId],
+    );
+    if (!consent.rows.length)
+      throw new AppError(
+        "Gmail connection was paused, disconnected, or expired. Connect again.",
+      );
     const [existing] = (
       await c.query(
         "SELECT * FROM gmail_connections WHERE user_id=$1 FOR UPDATE",
@@ -241,6 +258,9 @@ export async function gmailCallback(ctx: Context, req: Request) {
         ],
       )
     ).rows;
+    await c.query("DELETE FROM gmail_oauth_states WHERE state_hash=$1", [
+      hash(state),
+    ]);
     await enqueue(
       "gmail_sync",
       {

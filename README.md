@@ -319,3 +319,8 @@ in progress. Workers recheck the connection generation before exporting. An expo
 already in progress finishes before disconnect or member removal commits; previously
 exported Google events remain in Google. Apply the migration before starting updated
 web and worker processes together. No new OAuth scope is required.
+
+Migration `017_gmail_consent_cancellation.sql` keeps Gmail reconnect attempts
+cancelable during their token exchange. Pause, disconnect, and plan downgrade
+cannot be undone by a callback that was already in progress. Consent stays
+single-use; a fresh connection can be started when the household is eligible.

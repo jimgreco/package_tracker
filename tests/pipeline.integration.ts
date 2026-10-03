@@ -75,6 +75,7 @@ before(async () => {
     "014_gmail_source_links.sql",
     "015_package_notes.sql",
     "016_calendar_membership.sql",
+    "017_gmail_consent_cancellation.sql",
   ])
     await query(await readFile("db/" + file, "utf8"));
   const [h] = await query(
