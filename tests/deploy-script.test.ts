@@ -10,7 +10,7 @@ const image = `ghcr.io/jimgreco/package_tracker:${build}`;
 const previous = `ghcr.io/jimgreco/package_tracker:${"2".repeat(40)}`;
 const script = resolve("scripts/deploy-ec2.sh");
 
-function release(failure = "", configured = true) {
+function release(failure = "", configured = true, preflightOnly = false) {
   const root = mkdtempSync(join(tmpdir(), "porchpong-deploy-test-"));
   const bin = join(root, "bin");
   const log = join(root, "commands.jsonl");
@@ -39,6 +39,7 @@ if (tool === 'docker-compose') {
 if (tool === 'docker' && args[0] === 'inspect') {
   if (!args.includes('--format')) console.log(JSON.stringify([{Config:{Env:['NODE_ENV=production','APP_BUILD=previous','DATABASE_URL='+(process.env.DEPLOY_TEST_FAILURE === 'configuration' ? 'fixture-private-drift' : 'fixture-private-current')],Labels:{'com.docker.compose.project':'deploy','com.docker.compose.project.working_dir':fs.realpathSync(process.env.HOME+'/deploy'),'com.docker.compose.project.config_files':fs.realpathSync(process.env.HOME+'/deploy')+'/docker-compose.yml'+(process.env.DEPLOY_TEST_FAILURE === 'compose-source' ? ',extra.yml' : '')}}}]));
   else if (args[2] === '{{.Config.Image}}') console.log(process.env.DOORSTEP_IMAGE);
+  else if (args[2] === '{{.Image}}') console.log('sha256:'+'3'.repeat(64));
   else if (args[2] === '{{.State.Health.Status}}') console.log('healthy');
   else console.log('previous-image-kept');
 }
@@ -55,6 +56,7 @@ if (tool === 'docker' && args[0] === 'image' && args[1] === 'inspect') console.l
         PATH: `${bin}:${process.env.PATH}`,
         DEPLOY_TEST_LOG: log,
         DEPLOY_TEST_FAILURE: failure,
+        PREFLIGHT_ONLY: preflightOnly ? "1" : "0",
       },
     });
     const commands: string[][] = readFileSync(log, "utf8")
@@ -80,7 +82,23 @@ test("deployment preserves rollback images/config and drains only the app before
   assert.deepEqual(compose[index("stop")], ["stop", "--timeout", "120", "doorstep", "doorstep-worker"]);
   assert.deepEqual(compose[index("up")], ["up", "-d", "--no-deps", "--no-build", "doorstep", "doorstep-worker"]);
   assert.ok(commands.every((c) => !c.includes("prune") && !c.includes("rm") && !c.includes("psql")));
+  const tags = commands.filter((c) => c[0] === "docker" && c[1] === "image" && c[2] === "tag");
+  assert.deepEqual(tags.map((c) => c.slice(3)), [
+    [`sha256:${"3".repeat(64)}`, `local/porchpong-rollback:doorstep-${"3".repeat(64)}`],
+    [`sha256:${"3".repeat(64)}`, `local/porchpong-rollback:doorstep-worker-${"3".repeat(64)}`],
+  ]);
+  assert.ok(commands.indexOf(tags[1]) < commands.findIndex((c) => c.includes("stop")));
   assert.equal(updated.replace(`DOORSTEP_IMAGE=${image}\n`, ""), original.replace(`DOORSTEP_IMAGE=${previous}\n`, ""));
+});
+
+test("preflight-only verifies image/config/database without stopping, tagging, migrating or changing the pin", () => {
+  const { result, commands, original, updated } = release("", true, true);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /PorchPong preflight passed/);
+  assert.ok(commands.some((c) => c.includes("pull")));
+  assert.ok(commands.some((c) => c.includes("node") && c.includes("run")));
+  assert.ok(commands.every((c) => !c.includes("stop") && !c.includes("up") && !c.includes("tag") && !c.includes("scripts/migrate.ts")));
+  assert.equal(updated, original);
 });
 
 for (const failure of ["pull", "database", "configuration", "compose-source"]) {

@@ -184,6 +184,8 @@ The `doorstep` Compose profile keeps application release pins separate from unre
 
 Back up the `doorstep` database, the `deploy_doorstep_uploads` volume, and the encryption key together. For a compatible rollback, rerun the deployment script with a previously published full commit SHA and its matching image after authenticating Docker to GHCR. Migrations are forward-only; do not roll back application code across an incompatible schema change.
 
+The coordinator can first run `PREFLIGHT_ONLY=1 bash doorstep/deploy-ec2.sh <full-sha> ghcr.io/jimgreco/package_tracker:<full-sha>` on the host. It pulls the candidate and checks configuration/database access, then exits before tagging, stopping services, migrating, or changing the pin. A normal release tags both actual old image IDs under `local/porchpong-rollback` before replacing containers. Keep those tags and source images; host-wide `docker image prune -a` can still remove unreferenced tagged images and must not be used for release cleanup.
+
 ## Verification
 
 ```bash

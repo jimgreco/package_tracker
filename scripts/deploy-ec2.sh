@@ -2,6 +2,8 @@
 set -euo pipefail
 build=${1:?Expected full commit SHA}
 image=${2:?Expected versioned image}
+preflight_only=${PREFLIGHT_ONLY:-0}
+[[ "$preflight_only" == 0 || "$preflight_only" == 1 ]] || { echo "PREFLIGHT_ONLY must be 0 or 1"; exit 1; }
 [[ "$build" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid build SHA"; exit 1; }
 [[ "$image" == "ghcr.io/jimgreco/package_tracker:$build" ]] || { echo "Unexpected image"; exit 1; }
 cd "$HOME/deploy"
@@ -75,6 +77,10 @@ except Exception:
  sys.exit(1)
 PY
 compose run --rm --no-deps -T doorstep node --input-type=module -e 'import pg from "pg";const p=new pg.Pool({connectionString:process.env.DATABASE_URL});try{await p.query("SELECT 1")}finally{await p.end()}' </dev/null
+if [ "$preflight_only" = 1 ]; then
+  echo "PorchPong preflight passed; no services stopped, migrations applied, or release pin changed"
+  exit 0
+fi
 # Stop both old processes before migration: old Calendar workers do not enforce
 # the generation/membership fence. Do not automatically restart old code after a
 # successful forward-only migration. A failed release requires a compatible image.
@@ -82,6 +88,11 @@ for service in doorstep doorstep-worker; do
   container=$(compose ps -q "$service")
   if [ -n "$container" ]; then
     docker inspect --format '{{.Name}} previous image: {{.Config.Image}} ({{.Image}})' "$container"
+    previous_id=$(docker inspect --format '{{.Image}}' "$container")
+    [[ "$previous_id" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "Invalid previous image ID for $service"; exit 1; }
+    rollback_image="local/porchpong-rollback:$service-${previous_id#sha256:}"
+    docker image tag "$previous_id" "$rollback_image"
+    echo "$service retained as $rollback_image"
   fi
 done
 compose stop --timeout 120 doorstep doorstep-worker
