@@ -29,6 +29,7 @@ if (tool === 'flock') process.exit(0);
 if (tool === 'docker-compose') {
   const action = args[2];
   if (action === 'config' && args.includes('--services')) console.log('doorstep\\ndoorstep-worker');
+  if (action === 'config' && args.includes('--format')) console.log(JSON.stringify({services:{doorstep:{environment:{DATABASE_URL:'fixture-private-current'}},'doorstep-worker':{environment:{DATABASE_URL:'fixture-private-current'}}}}));
   if (action === 'ps') console.log(args.at(-1)+'-container');
   const fail = process.env.DEPLOY_TEST_FAILURE;
   if ((fail === 'pull' && action === 'pull') ||
@@ -36,10 +37,12 @@ if (tool === 'docker-compose') {
       (fail === 'migration' && args.includes('scripts/migrate.ts'))) process.exit(1);
 }
 if (tool === 'docker' && args[0] === 'inspect') {
-  if (args[2] === '{{.Config.Image}}') console.log(process.env.DOORSTEP_IMAGE);
+  if (!args.includes('--format')) console.log(JSON.stringify([{Config:{Env:['NODE_ENV=production','APP_BUILD=previous','DATABASE_URL='+(process.env.DEPLOY_TEST_FAILURE === 'configuration' ? 'fixture-private-drift' : 'fixture-private-current')],Labels:{'com.docker.compose.project':'deploy','com.docker.compose.project.working_dir':fs.realpathSync(process.env.HOME+'/deploy'),'com.docker.compose.project.config_files':fs.realpathSync(process.env.HOME+'/deploy')+'/docker-compose.yml'+(process.env.DEPLOY_TEST_FAILURE === 'compose-source' ? ',extra.yml' : '')}}}]));
+  else if (args[2] === '{{.Config.Image}}') console.log(process.env.DOORSTEP_IMAGE);
   else if (args[2] === '{{.State.Health.Status}}') console.log('healthy');
   else console.log('previous-image-kept');
 }
+if (tool === 'docker' && args[0] === 'image' && args[1] === 'inspect') console.log(JSON.stringify([{Config:{Env:['NODE_ENV=production','APP_BUILD=current']}}]));
 `;
   for (const tool of ["docker", "docker-compose", "flock"])
     writeFileSync(join(bin, tool), fake, { mode: 0o755 });
@@ -80,12 +83,17 @@ test("deployment preserves rollback images/config and drains only the app before
   assert.equal(updated.replace(`DOORSTEP_IMAGE=${image}\n`, ""), original.replace(`DOORSTEP_IMAGE=${previous}\n`, ""));
 });
 
-for (const failure of ["pull", "database"]) {
+for (const failure of ["pull", "database", "configuration", "compose-source"]) {
   test(`failed ${failure} preflight keeps running services and configuration untouched`, () => {
     const { result, commands, original, updated } = release(failure);
     assert.notEqual(result.status, 0);
     assert.ok(commands.every((c) => !c.includes("stop") && !c.includes("up") && !c.includes("scripts/migrate.ts")));
     assert.equal(updated, original);
+    if (failure === "configuration") {
+      assert.match(result.stderr, /effective environment differs for keys: DATABASE_URL/);
+      assert.doesNotMatch(result.stderr + result.stdout, /fixture-private/);
+    }
+    if (failure === "compose-source") assert.match(result.stderr, /Compose source mismatch/);
   });
 }
 

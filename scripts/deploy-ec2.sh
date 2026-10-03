@@ -33,6 +33,47 @@ docker exec shared_db pg_isready -U admin >/dev/null
 # Preserve all previous images for operator-controlled rollback. Pull and check
 # existing application database access before creating an interruption.
 compose pull doorstep doorstep-worker
+# Compare values only in host memory. Report key names, never configuration or
+# credentials. Refuse a release that would silently change effective app config.
+python3 - <<'PY'
+import json,os,subprocess,sys
+def run(*args):
+ return subprocess.check_output(args, text=True, stderr=subprocess.DEVNULL)
+def env_map(items):
+ return dict(item.split('=',1) for item in items if '=' in item)
+try:
+ config=json.loads(run('docker-compose','-f','docker-compose.yml','config','--format','json'))
+ image=json.loads(run('docker','image','inspect',os.environ['DOORSTEP_IMAGE']))[0]
+ defaults=env_map(image['Config'].get('Env') or [])
+ expected_labels={
+  'com.docker.compose.project':'deploy',
+  'com.docker.compose.project.working_dir':os.getcwd(),
+  'com.docker.compose.project.config_files':os.path.join(os.getcwd(),'docker-compose.yml'),
+ }
+ for service in ['doorstep','doorstep-worker']:
+  container=run('docker-compose','-f','docker-compose.yml','ps','-a','-q',service).strip()
+  if not container:
+   raise RuntimeError('Existing container required for '+service)
+  current=json.loads(run('docker','inspect',container))[0]['Config']
+  labels=current.get('Labels') or {}
+  if any(labels.get(key)!=value for key,value in expected_labels.items()):
+   raise RuntimeError('Compose source mismatch for '+service)
+  expected=dict(defaults)
+  expected.update({key:str(value) for key,value in config['services'][service].get('environment',{}).items() if value is not None})
+  actual=env_map(current.get('Env') or [])
+  # Image version metadata may change with the release; application settings may not.
+  changes=sorted(key for key in expected.keys() | actual.keys()
+   if key not in ['APP_BUILD','NODE_VERSION','YARN_VERSION'] and expected.get(key)!=actual.get(key))
+  if changes:
+   raise RuntimeError(service+' effective environment differs for keys: '+', '.join(changes))
+ print('Existing Compose sources and effective application environment verified')
+except RuntimeError as error:
+ print(str(error),file=sys.stderr)
+ sys.exit(1)
+except Exception:
+ print('Could not verify existing effective application configuration',file=sys.stderr)
+ sys.exit(1)
+PY
 compose run --rm --no-deps -T doorstep node --input-type=module -e 'import pg from "pg";const p=new pg.Pool({connectionString:process.env.DATABASE_URL});try{await p.query("SELECT 1")}finally{await p.end()}' </dev/null
 # Stop both old processes before migration: old Calendar workers do not enforce
 # the generation/membership fence. Do not automatically restart old code after a
