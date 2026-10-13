@@ -3,6 +3,30 @@ import XCTest
 @testable import PorchPong
 
 final class ModelTests: XCTestCase {
+  func testToCollectFilterTracksCollectionAndVisibility() {
+    var shipment = Fixture.shipment()
+    shipment.status = "delivered"
+    shipment.collectedAt = nil
+    XCTAssertTrue(PackageFilter.toCollect.includes(shipment))
+    XCTAssertEqual(PackageFilter.toCollect.results([shipment], search: shipment.merchant).count, 1)
+    XCTAssertTrue(PackageFilter.toCollect.results([shipment], search: "no matching merchant").isEmpty)
+    shipment.collectedAt = "2026-10-13T12:00:00Z"
+    XCTAssertFalse(PackageFilter.toCollect.includes(shipment))
+    shipment.collectedAt = nil
+    XCTAssertTrue(PackageFilter.toCollect.includes(shipment))
+    shipment.snoozedAt = "2026-10-13T12:00:00Z"
+    XCTAssertFalse(PackageFilter.toCollect.includes(shipment))
+    shipment.snoozedAt = nil
+    shipment.dismissedAt = "2026-10-13T12:00:00Z"
+    XCTAssertFalse(PackageFilter.toCollect.includes(shipment))
+    shipment.dismissedAt = nil
+    shipment.archivedAt = "2026-10-13T12:00:00Z"
+    XCTAssertFalse(PackageFilter.toCollect.includes(shipment))
+    shipment.archivedAt = nil
+    shipment.status = "in_transit"
+    XCTAssertFalse(PackageFilter.toCollect.includes(shipment))
+  }
+
   func testDashboardAndSeparateSourceEmailDecoding() throws {
     let data = try JSONEncoder().encode(Fixture.dashboard())
     let decoded = try JSONDecoder().decode(Dashboard.self, from: data)

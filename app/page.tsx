@@ -39,6 +39,7 @@ import {
   includesDay,
   since,
   messageDateLabel,
+  awaitingCollection,
 } from "@/lib/display";
 import {
   Modal,
@@ -282,6 +283,8 @@ export default function Page() {
         ? [...attention, ...active.filter((s) => !needsAttention(s))]
         : filter === "Delivered"
           ? delivered
+          : filter === "To collect"
+            ? all.filter(awaitingCollection)
           : all
   ).filter(matchesSearch);
   const visibleAttentionCount =
@@ -470,6 +473,7 @@ export default function Page() {
                           {[
                             "On the way",
                             "Delivered",
+                            "To collect",
                             "Dismissed",
                             "All packages",
                           ].map((t) => (
@@ -491,8 +495,7 @@ export default function Page() {
                         <span>{visible.length} packages</span>
                       </div>
                       <p className="sort-explanation">
-                        Newest first by initial email date, or date added
-                        manually.
+                        {filter === "To collect" ? "Delivered packages not yet marked collected." : "Newest first by initial email date, or date added manually."}
                       </p>
                       <div className="search-box">
                         <Search size={17} />

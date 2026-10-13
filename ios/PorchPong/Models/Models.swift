@@ -68,6 +68,7 @@ struct Shipment: Codable, Identifiable, Equatable, Sendable {
 enum PackageFilter: String, CaseIterable, Identifiable {
   case onTheWay = "On the way"
   case delivered = "Delivered"
+  case toCollect = "To collect"
   case dismissed = "Dismissed"
   case all = "All packages"
   var id: String { rawValue }
@@ -91,6 +92,7 @@ enum PackageFilter: String, CaseIterable, Identifiable {
     case .onTheWay:
       return Self.needsAttention(s) || Self.isActive(s)
     case .delivered: return s.status == "delivered"
+    case .toCollect: return s.status == "delivered" && s.collectedAt == nil
     case .dismissed: return false
     }
   }

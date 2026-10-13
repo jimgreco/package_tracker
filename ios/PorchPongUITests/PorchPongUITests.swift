@@ -80,6 +80,23 @@ import XCTest
     reveal(app.buttons["Mark collected"])
     XCTAssertTrue(app.buttons["Mark collected"].waitForExistence(timeout: 5))
   }
+  func testToCollectFilterUpdatesAfterCollection() {
+    launch()
+    XCTAssertTrue(app.buttons["packageFilter"].waitForExistence(timeout: 5))
+    app.buttons["packageFilter"].tap()
+    app.buttons["To collect (1)"].tap()
+    XCTAssertTrue(app.staticTexts["Delivered packages not yet marked collected."].exists)
+    XCTAssertTrue(app.staticTexts["Cometeer"].exists)
+    screenshot("to-collect-filter")
+    app.staticTexts["Cometeer"].tap()
+    reveal(app.buttons["Mark collected"])
+    app.buttons["Mark collected"].tap()
+    XCTAssertTrue(app.buttons["Undo collection"].waitForExistence(timeout: 5))
+    app.navigationBars["Package"].buttons.firstMatch.tap()
+    XCTAssertTrue(app.staticTexts["No packages here"].waitForExistence(timeout: 5))
+    XCTAssertFalse(app.staticTexts["Cometeer"].exists)
+    screenshot("to-collect-complete")
+  }
   func testAttentionReasonsAndNotificationSettings() {
     launch()
     XCTAssertTrue(app.buttons["packageFilter"].waitForExistence(timeout: 5))

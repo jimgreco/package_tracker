@@ -1,4 +1,7 @@
 import type { Shipment, Estimate } from "./types";
+export function awaitingCollection(s: Shipment) {
+  return s.status === "delivered" && !s.collectedAt && !s.archivedAt && !s.dismissedAt && !s.snoozedAt;
+}
 export function todayInZone(zone: string) {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: zone,

@@ -52,7 +52,7 @@ struct PackagesView: View {
           Text(
             filter == .onTheWay
               ? "Today's deliveries first. Future packages are newest first."
-              : "Newest orders first."
+              : filter == .toCollect ? "Delivered packages not yet marked collected." : "Newest orders first."
           )
             .font(.caption).foregroundStyle(.secondary)
           Menu {
