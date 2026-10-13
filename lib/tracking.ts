@@ -8,6 +8,7 @@ import { STATUSES } from "./types";
 import { trackingCarrier } from "./tracking-identity";
 import { fedexConfigured, isFedex } from "./tracking-config";
 import { fetchFedex } from "./fedex";
+import { instant } from "./calendar";
 export const trackerSchema = z.object({
   id: z.string().startsWith("trk_"),
   tracking_code: z.string(),
@@ -44,6 +45,15 @@ export const trackerSchema = z.object({
     .default([]),
 });
 export type Tracker = z.infer<typeof trackerSchema>;
+function estimateDay(estimate: Estimate) {
+  if (estimate.kind === "date" || estimate.kind === "date_range")
+    return estimate.start;
+  return instant(estimate.start, estimate.timeZone)
+    .toZonedDateTimeISO(estimate.timeZone)
+    .toPlainDate()
+    .toString();
+}
+
 async function easy(path: string, method = "GET", body?: unknown) {
   if (!process.env.EASYPOST_API_KEY)
     throw new AppError("Tracking service is not configured.", 503);
@@ -274,7 +284,7 @@ export async function applyTracker(
       estimate &&
       (!merged ||
         estimate.kind === "window" ||
-        merged.start.slice(0, 10) !== estimate.start.slice(0, 10) ||
+        estimateDay(merged) !== estimateDay(estimate) ||
         merged.kind === "date" ||
         merged.kind === "date_range")
     )

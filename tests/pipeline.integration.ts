@@ -353,6 +353,24 @@ for (const [operation, status] of [["register", 422], ["register", 500], ["refre
     }
   });
 }
+test("carrier dates preserve narrow windows on the same destination day across UTC midnight", async () => {
+  const estimate = { kind: "window", start: "2026-09-25T01:00:00Z", end: "2026-09-25T03:00:00Z", timeZone: "America/Los_Angeles", label: "Arrives Thursday evening" };
+  const trackingNumber = `ZONE${randomUUID()}`;
+  const id = await saveManual({
+    merchant: `Destination date ${randomUUID()}`, orderNumber: null, orderedAt: null,
+    items: [{ name: "Lamp", quantity: 1, imageUrl: null }], carrier: "UPS", trackingNumber,
+    trackingUrl: null, status: "in_transit", shippedAt: null, deliveredAt: null, estimate,
+  }, ctx);
+  await query("UPDATE shipments SET tracker_id='trk_zone',status_at='2026-09-20',estimate_at='2026-09-20' WHERE id=$1", [id]);
+  const tracker = { id: "trk_zone", tracking_code: trackingNumber, status: "in_transit", updated_at: "2026-09-23T12:00:00Z", tracking_details: [] };
+  await applyTracker(id, { ...tracker, est_delivery_date: "2026-09-24" });
+  assert.deepEqual((await shipment(id, ctx.householdId)).shipment.estimate, estimate);
+  await applyTracker(id, { ...tracker, updated_at: "2026-09-23T13:00:00Z", est_delivery_date: "2026-09-26" });
+  const changed = (await shipment(id, ctx.householdId)).shipment.estimate;
+  assert.equal(changed?.kind, "date");
+  assert.equal(changed?.start, "2026-09-26");
+});
+
 test("unrelated detail edits preserve evidence times and allow newer carrier updates", async () => {
   const input = {
     merchant: `Evidence clocks ${randomUUID()}`,
