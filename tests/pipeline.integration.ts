@@ -271,6 +271,35 @@ test("late carrier updates do not regress delivered status or overwrite manual d
   assert.equal(locked.status, "in_transit");
   assert.equal(locked.estimate.start, "2026-09-25");
 });
+test("unrecognized carrier statuses preserve known status without discarding source events", async () => {
+  const id = await saveManual({
+    merchant: `Known status ${randomUUID()}`, orderNumber: null, orderedAt: null,
+    items: [{ name: "Lamp", quantity: 1, imageUrl: null }], carrier: "UPS",
+    trackingNumber: randomUUID(), trackingUrl: null, status: "in_transit",
+    shippedAt: null, estimate: null, deliveredAt: null,
+  }, ctx);
+  await query("UPDATE shipments SET tracker_id='trk_known',status_at='2026-09-20T12:00:00Z',last_checked_at='2026-09-20T12:00:00Z' WHERE id=$1", [id]);
+  const before = (await shipment(id, ctx.householdId)).row;
+  await applyTracker(id, {
+    id: "trk_known", tracking_code: before.tracking_number, status: "carrier_specific_status",
+    updated_at: "2026-09-22T12:00:00Z", tracking_details: [
+      { status: "carrier_specific_status", datetime: "2026-09-22T12:00:00Z", message: "Carrier scan received" },
+    ],
+  });
+  const saved = (await shipment(id, ctx.householdId)).row;
+  assert.equal(saved.status, "in_transit");
+  assert.equal(saved.status_at.getTime(), before.status_at.getTime());
+  assert.equal(saved.tracking_state, "active");
+  assert.ok(saved.last_checked_at > before.last_checked_at);
+  assert.ok((await query("SELECT message FROM tracking_events WHERE shipment_id=$1", [id])).some((event) => event.message === "Carrier scan received"));
+  // A real update older than the unrecognized scan still advances the known status.
+  await applyTracker(id, {
+    id: "trk_known", tracking_code: before.tracking_number, status: "out_for_delivery",
+    updated_at: "2026-09-21T12:00:00Z", tracking_details: [],
+  });
+  assert.equal((await shipment(id, ctx.householdId)).shipment.status, "out_for_delivery");
+});
+
 test("manual edits enforce household ownership and reject duplicate tracking", async () => {
   const s = (await shipments(ctx.householdId)).find(
     (s) => s.trackingNumber === "TRACK200",

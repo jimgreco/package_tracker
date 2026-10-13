@@ -297,7 +297,7 @@ export async function applyTracker(
     const canUpdate =
       fresh &&
       !s.manual_override &&
-      !(direct && nextStatus === "unknown") &&
+      nextStatus !== "unknown" &&
       (!final || s.status === nextStatus);
     const estimateAt =
       tracker.updated_at && Number.isFinite(Date.parse(tracker.updated_at))
