@@ -307,6 +307,91 @@ test("manual edits enforce household ownership and reject duplicate tracking", a
   );
   await assert.rejects(saveManual(payload, ctx), /already in your household/);
 });
+test("unrelated detail edits preserve evidence times and allow newer carrier updates", async () => {
+  const input = {
+    merchant: `Evidence clocks ${randomUUID()}`,
+    orderNumber: null,
+    orderedAt: null,
+    items: [{ name: "Lamp", quantity: 1, imageUrl: null }],
+    carrier: "UPS",
+    trackingNumber: `CLOCK${randomUUID()}`,
+    trackingUrl: null,
+    status: "in_transit" as const,
+    shippedAt: null,
+    estimate: {
+      kind: "date" as const,
+      start: "2026-09-24",
+      end: null,
+      timeZone: "America/New_York",
+      label: null,
+    },
+    deliveredAt: null,
+  };
+  const id = await saveManual(input, ctx);
+  await query(
+    "UPDATE shipments SET status_at='2026-09-20T12:00:00Z',estimate_at='2026-09-20T12:00:00Z',last_checked_at='2026-09-20T12:00:00Z',tracker_id='trk_clock' WHERE id=$1",
+    [id],
+  );
+  await saveManual(
+    {
+      ...input,
+      note: "Leave inside the porch",
+      items: [{ ...input.items[0], quantity: 2 }],
+    },
+    ctx,
+    id,
+  );
+  const { row } = await shipment(id, ctx.householdId);
+  assert.equal(row.status_at.toISOString(), "2026-09-20T12:00:00.000Z");
+  assert.equal(row.estimate_at.toISOString(), "2026-09-20T12:00:00.000Z");
+  await applyTracker(
+    id,
+    {
+      id: "trk_clock",
+      tracking_code: input.trackingNumber,
+      status: "out_for_delivery",
+      updated_at: "2026-09-21T12:00:00Z",
+      tracking_details: [],
+    },
+    {
+      estimate: { ...input.estimate, start: "2026-09-25" },
+      reviewReason: null,
+    },
+  );
+  const updated = (await shipment(id, ctx.householdId)).shipment;
+  assert.equal(updated.status, "out_for_delivery");
+  assert.equal(updated.estimate?.start, "2026-09-25");
+  assert.equal(updated.note, "Leave inside the porch");
+
+  const carrier = (await shipment(id, ctx.householdId)).row;
+  await saveManual(
+    { ...input, status: "delayed", estimate: updated.estimate },
+    ctx,
+    id,
+  );
+  const corrected = (await shipment(id, ctx.householdId)).row;
+  assert.ok(corrected.status_at > carrier.status_at);
+  assert.equal(
+    corrected.estimate_at.toISOString(),
+    carrier.estimate_at.toISOString(),
+  );
+  await saveManual(
+    {
+      ...input,
+      status: "delayed",
+      estimate: { ...input.estimate, start: "2026-09-28" },
+    },
+    ctx,
+    id,
+  );
+  const rescheduled = (await shipment(id, ctx.householdId)).row;
+  assert.equal(
+    rescheduled.status_at.toISOString(),
+    corrected.status_at.toISOString(),
+  );
+  assert.ok(rescheduled.estimate_at > corrected.estimate_at);
+});
+
 test("household package notes survive edits and can be cleared", async () => {
   const input = {
     merchant: `Note fixture ${randomUUID()}`,

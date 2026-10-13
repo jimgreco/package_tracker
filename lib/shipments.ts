@@ -480,9 +480,10 @@ export async function saveManual(
     ];
     let saved;
     if (id) {
+      // Detail-only edits must not make existing carrier/email evidence look newer.
       saved = (
         await c.query(
-          `UPDATE shipments SET collected_at=CASE WHEN $5='delivered' THEN collected_at ELSE NULL END,collected_by=CASE WHEN $5='delivered' THEN collected_by ELSE NULL END,collected_by_name=CASE WHEN $5='delivered' THEN collected_by_name ELSE NULL END,items=$1,carrier=$2,tracking_number=$3,tracking_url=$4,status=$5,shipped_at=$6,estimate=$7,delivered_at=$8,manual_override=$9,tracking_state=CASE WHEN $13 THEN $10 ELSE tracking_state END,tracker_id=CASE WHEN $13 THEN NULL ELSE tracker_id END,note=$11,needs_review=false,review_reason=NULL,updated_at=now(),status_at=now(),estimate_at=now(),version=version+1 WHERE id=$12 RETURNING *`,
+          `UPDATE shipments SET collected_at=CASE WHEN $5='delivered' THEN collected_at ELSE NULL END,collected_by=CASE WHEN $5='delivered' THEN collected_by ELSE NULL END,collected_by_name=CASE WHEN $5='delivered' THEN collected_by_name ELSE NULL END,items=$1,carrier=$2,tracking_number=$3,tracking_url=$4,status=$5,shipped_at=$6,estimate=$7,delivered_at=$8,manual_override=$9,tracking_state=CASE WHEN $13 THEN $10 ELSE tracking_state END,tracker_id=CASE WHEN $13 THEN NULL ELSE tracker_id END,note=$11,needs_review=false,review_reason=NULL,updated_at=now(),status_at=CASE WHEN status IS DISTINCT FROM $5 OR delivered_at IS DISTINCT FROM $8::timestamptz THEN now() ELSE status_at END,estimate_at=CASE WHEN coalesce(estimate,'null'::jsonb) IS DISTINCT FROM $7::jsonb THEN now() ELSE estimate_at END,version=version+1 WHERE id=$12 RETURNING *`,
           [...params, id, !!trackingChanged],
         )
       ).rows[0];
