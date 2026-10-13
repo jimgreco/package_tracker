@@ -3,6 +3,11 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { X, Package, LoaderCircle, ArrowRight, Users } from "lucide-react";
 import type { Shipment, Estimate } from "@/lib/types";
 import { estimateLocal } from "@/lib/display";
+import {
+  preserveUnchangedEstimate,
+  timestampInput,
+  timestampValue,
+} from "@/lib/manual-form";
 import { STATUSES, STATUS_LABEL } from "@/lib/types";
 export async function api<T = Record<string, unknown>>(
   path: string,
@@ -173,20 +178,7 @@ export function PackageForm({
         label: null,
       };
     }
-    if (
-      estimate &&
-      value?.estimate &&
-      estimate.kind === value.estimate.kind &&
-      estimate.timeZone === value.estimate.timeZone &&
-      estimate.start ===
-        estimateLocal(value.estimate.start, value.estimate.timeZone) &&
-      estimate.end ===
-        (value.estimate.end
-          ? estimateLocal(value.estimate.end, value.estimate.timeZone)
-          : null)
-    ) {
-      estimate = value.estimate;
-    }
+    estimate = preserveUnchangedEstimate(estimate, value?.estimate);
     try {
       const result = await api<{ id: string }>(
         "shipments" + (value ? "/" + value.id : ""),
@@ -200,13 +192,13 @@ export function PackageForm({
           trackingNumber: str("trackingNumber") || null,
           trackingUrl: str("trackingUrl") || null,
           status: str("status"),
-          shippedAt: str("shippedAt")
-            ? new Date(str("shippedAt") + "T12:00:00").toISOString()
-            : null,
+          shippedAt: timestampValue(str("shippedAt"), value?.shippedAt, "date"),
           estimate,
-          deliveredAt: str("deliveredAt")
-            ? new Date(str("deliveredAt")).toISOString()
-            : null,
+          deliveredAt: timestampValue(
+            str("deliveredAt"),
+            value?.deliveredAt,
+            "minute",
+          ),
           manualOverride: f.get("manualOverride") === "on",
         },
         value ? "PATCH" : "POST",
@@ -362,7 +354,7 @@ export function PackageForm({
           <input
             type="date"
             name="shippedAt"
-            defaultValue={value?.shippedAt?.slice(0, 10) || ""}
+            defaultValue={timestampInput(value?.shippedAt, "date")}
           />
         </label>
       </div>
@@ -462,16 +454,7 @@ export function PackageForm({
         <input
           name="deliveredAt"
           type="datetime-local"
-          defaultValue={
-            value?.deliveredAt
-              ? new Date(
-                  new Date(value.deliveredAt).getTime() -
-                    new Date(value.deliveredAt).getTimezoneOffset() * 60000,
-                )
-                  .toISOString()
-                  .slice(0, 16)
-              : ""
-          }
+          defaultValue={timestampInput(value?.deliveredAt, "minute")}
         />
       </label>
       <label className="check-label">
