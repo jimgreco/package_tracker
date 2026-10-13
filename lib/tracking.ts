@@ -106,14 +106,14 @@ export async function registerTracking(id: string) {
   } catch (e) {
     if (e instanceof AppError && [400, 404, 422].includes(e.status)) {
       await query(
-        "UPDATE shipments SET tracking_state='unsupported',tracking_error=$2,last_checked_at=now() WHERE id=$1",
-        [id, e.message],
+        "UPDATE shipments SET tracking_state='unsupported',tracking_error=$2,last_checked_at=now() WHERE id=$1 AND tracking_number=$3 AND carrier IS NOT DISTINCT FROM $4 AND tracker_id IS NOT DISTINCT FROM $5 AND dismissed_at IS NULL AND archived_at IS NULL",
+        [id, e.message, s.trackingNumber, s.carrier, row.tracker_id],
       );
       return;
     }
     await query(
-      "UPDATE shipments SET tracking_state='error',tracking_error='Tracking service could not be reached.' WHERE id=$1",
-      [id],
+      "UPDATE shipments SET tracking_state='error',tracking_error='Tracking service could not be reached.' WHERE id=$1 AND tracking_number=$2 AND carrier IS NOT DISTINCT FROM $3 AND tracker_id IS NOT DISTINCT FROM $4 AND dismissed_at IS NULL AND archived_at IS NULL",
+      [id, s.trackingNumber, s.carrier, row.tracker_id],
     );
     throw e;
   }
@@ -140,8 +140,8 @@ export async function refreshTracking(id: string) {
     );
   } catch (e) {
     await query(
-      "UPDATE shipments SET tracking_state='error',tracking_error='Could not refresh tracking. We will retry.' WHERE id=$1",
-      [id],
+      "UPDATE shipments SET tracking_state='error',tracking_error='Could not refresh tracking. We will retry.' WHERE id=$1 AND tracking_number=$2 AND carrier IS NOT DISTINCT FROM $3 AND tracker_id IS NOT DISTINCT FROM $4 AND dismissed_at IS NULL AND archived_at IS NULL",
+      [id, s.trackingNumber, s.carrier, row.tracker_id],
     );
     throw e;
   }

@@ -307,6 +307,52 @@ test("manual edits enforce household ownership and reject duplicate tracking", a
   );
   await assert.rejects(saveManual(payload, ctx), /already in your household/);
 });
+
+for (const [operation, status] of [["register", 422], ["register", 500], ["refresh", 500]] as const) {
+  test(`obsolete ${operation} failure (${status}) cannot overwrite corrected tracking`, async () => {
+    const previousFetch = globalThis.fetch;
+    const previousKey = process.env.EASYPOST_API_KEY;
+    process.env.EASYPOST_API_KEY = "fixture-key";
+    try {
+      const input = {
+        merchant: `Tracking correction ${randomUUID()}`, orderNumber: null, orderedAt: null,
+        items: [{ name: "Lamp", quantity: 1, imageUrl: null }], carrier: "UPS",
+        trackingNumber: randomUUID(), trackingUrl: null, status: "in_transit",
+        shippedAt: null, estimate: null, deliveredAt: null,
+      };
+      const id = await saveManual(input, ctx);
+      if (operation === "refresh")
+        await query("UPDATE shipments SET tracker_id='trk_obsolete',tracking_state='active' WHERE id=$1", [id]);
+      let started!: () => void;
+      const requested = new Promise<void>((resolve) => { started = resolve; });
+      let respond!: (response: Response) => void;
+      globalThis.fetch = async () => {
+        started();
+        return new Promise<Response>((resolve) => { respond = resolve; });
+      };
+      const pending = (operation === "register" ? registerTracking(id) : refreshTracking(id)).catch((error) => error);
+      await requested;
+      await saveManual({ ...input, trackingNumber: randomUUID() }, ctx, id);
+      respond(Response.json({ error: { message: "Obsolete request failed" } }, { status }));
+      await pending;
+      const { row } = await shipment(id, ctx.householdId);
+      assert.equal(row.tracking_state, "pending");
+      assert.equal(row.tracking_error, null);
+      assert.equal(row.tracker_id, null);
+
+      // A failure for the current identity must still be surfaced normally.
+      globalThis.fetch = async () => Response.json({ error: { message: "Current request failed" } }, { status });
+      await registerTracking(id).catch(() => {});
+      const current = (await shipment(id, ctx.householdId)).row;
+      assert.equal(current.tracking_state, status === 422 ? "unsupported" : "error");
+      assert.ok(current.tracking_error);
+    } finally {
+      globalThis.fetch = previousFetch;
+      if (previousKey === undefined) delete process.env.EASYPOST_API_KEY;
+      else process.env.EASYPOST_API_KEY = previousKey;
+    }
+  });
+}
 test("unrelated detail edits preserve evidence times and allow newer carrier updates", async () => {
   const input = {
     merchant: `Evidence clocks ${randomUUID()}`,
