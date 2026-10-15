@@ -71,6 +71,10 @@ struct PackageDetailView: View {
           ).font(.caption).foregroundStyle(.secondary)
         }
         Section("Actions") {
+          Button("Copy summary", systemImage: "doc.on.doc") {
+            UIPasteboard.general.string = s.copySummary(zone: store.timeZone, now: store.now())
+            store.message = "Package summary copied."
+          }
           if let raw = s.trackingUrl, let url = URL(string: raw), url.scheme == "https",
             url.user == nil, url.password == nil
           {

@@ -80,6 +80,15 @@ import XCTest
     reveal(app.buttons["Mark collected"])
     XCTAssertTrue(app.buttons["Mark collected"].waitForExistence(timeout: 5))
   }
+  func testCopyPackageSummary() {
+    launch()
+    XCTAssertTrue(app.staticTexts["Schoolhouse"].waitForExistence(timeout: 5))
+    app.staticTexts["Schoolhouse"].tap()
+    reveal(app.buttons["Copy summary"])
+    app.buttons["Copy summary"].tap()
+    XCTAssertTrue(app.staticTexts["Package summary copied."].waitForExistence(timeout: 5))
+    screenshot("package-summary-copied")
+  }
   func testToCollectFilterUpdatesAfterCollection() {
     launch()
     XCTAssertTrue(app.buttons["packageFilter"].waitForExistence(timeout: 5))

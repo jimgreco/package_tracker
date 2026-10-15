@@ -3,6 +3,27 @@ import XCTest
 @testable import PorchPong
 
 final class ModelTests: XCTestCase {
+  func testPackageSummaryPreservesDetailsAndCollectionState() {
+    var shipment = Fixture.shipment()
+    shipment.status = "delivered"
+    shipment.deliveredAt = "2026-10-15T01:00:00Z"
+    shipment.collectedAt = nil
+    shipment.note = "Side door"
+    let text = shipment.copySummary(zone: "America/New_York", now: Date())
+    XCTAssertTrue(text.contains("Status: Delivered"))
+    XCTAssertTrue(text.contains("Oct 14"))
+    XCTAssertTrue(text.contains("Order: 700100"))
+    XCTAssertTrue(text.contains("Tracking: CDL12345678"))
+    XCTAssertTrue(text.contains("Not yet collected\nNote: Side door"))
+    shipment.collectedAt = "2026-10-15T02:00:00Z"
+    XCTAssertTrue(shipment.copySummary(zone: "America/New_York", now: Date()).contains("\nCollected\n"))
+    shipment.orderNumber = nil
+    shipment.trackingNumber = nil
+    let missing = shipment.copySummary(zone: "America/New_York", now: Date())
+    XCTAssertFalse(missing.contains("Order:"))
+    XCTAssertFalse(missing.contains("Tracking:"))
+  }
+
   func testToCollectFilterTracksCollectionAndVisibility() {
     var shipment = Fixture.shipment()
     shipment.status = "delivered"

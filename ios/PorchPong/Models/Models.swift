@@ -47,6 +47,16 @@ struct Shipment: Codable, Identifiable, Equatable, Sendable {
   var summary: String {
     items.map { $0.quantity == 1 ? $0.name : "\($0.quantity) × \($0.name)" }.joined(separator: ", ")
   }
+  func copySummary(zone: String, now: Date) -> String {
+    var lines = [merchant, "Status: \(PackageStatus.label(status))", "Delivery: \(Dates.delivery(self, zone: zone, now: now))"]
+    lines += items.map { "\($0.quantity) × \($0.name)" }
+    if let orderNumber, !orderNumber.isEmpty { lines.append("Order: \(orderNumber)") }
+    if let carrier, !carrier.isEmpty { lines.append("Carrier: \(carrier)") }
+    if let trackingNumber, !trackingNumber.isEmpty { lines.append("Tracking: \(trackingNumber)") }
+    if status == "delivered" { lines.append(collectedAt == nil ? "Not yet collected" : "Collected") }
+    if let note, !note.isEmpty { lines.append("Note: \(note)") }
+    return lines.joined(separator: "\n")
+  }
   var canDeliver: Bool {
     dismissedAt == nil && !["delivered", "cancelled", "return_to_sender"].contains(status)
   }

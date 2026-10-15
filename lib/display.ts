@@ -1,4 +1,18 @@
 import type { Shipment, Estimate } from "./types";
+import { STATUS_LABEL } from "./types";
+export function packageSummary(s: Shipment, zone: string) {
+  const delivery = s.status === "delivered"
+    ? `Delivered ${s.deliveredAt ? dateLabel(dayFor(s, zone)!, { month: "short", day: "numeric", year: "numeric" }) : "· date not specified"}`
+    : [estimateLabel(s.estimate), estimateTime(s.estimate), s.estimate?.timeZone].filter(Boolean).join(" · ");
+  const lines = [s.merchant, `Status: ${STATUS_LABEL[s.status]}`, `Delivery: ${delivery}`];
+  for (const item of s.items) lines.push(`${item.quantity} × ${item.name}`);
+  if (s.orderNumber) lines.push(`Order: ${s.orderNumber}`);
+  if (s.carrier) lines.push(`Carrier: ${s.carrier}`);
+  if (s.trackingNumber) lines.push(`Tracking: ${s.trackingNumber}`);
+  if (s.status === "delivered") lines.push(s.collectedAt ? "Collected" : "Not yet collected");
+  if (s.note) lines.push(`Note: ${s.note}`);
+  return lines.join("\n");
+}
 export function awaitingCollection(s: Shipment) {
   return s.status === "delivered" && !s.collectedAt && !s.archivedAt && !s.dismissedAt && !s.snoozedAt;
 }

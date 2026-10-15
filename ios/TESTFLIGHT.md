@@ -41,7 +41,7 @@ at least the commit count and greater than every prior uploaded integer build.
 ## Apple and GitHub setup
 
 - Apple team: `V6JPQCD336`; bundle and callback scheme: `com.jimgreco.doorstep`.
-- Version: 1.0; minimum iOS 18.0; one iPhone app target, no extension or additional
+- Version: 1.3; minimum iOS 18.0; one iPhone app target, no extension or additional
   signing capabilities. Google login uses the server's existing web OAuth flow.
 - App Store Connect: [PorchPong Package Tracker, 6813927476](https://appstoreconnect.apple.com/apps/6813927476/testflight/ios).
   The explicit identifier and Owner internal group were created on Apple’s website;

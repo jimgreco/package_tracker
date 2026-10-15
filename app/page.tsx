@@ -40,6 +40,7 @@ import {
   since,
   messageDateLabel,
   awaitingCollection,
+  packageSummary,
 } from "@/lib/display";
 import {
   Modal,
@@ -1204,6 +1205,12 @@ export default function Page() {
                 </div>
               )}
               <div className="button-row detail-actions">
+                <button className="secondary" onClick={() => action("copy", async () => {
+                  await navigator.clipboard.writeText(packageSummary(detail.shipment, data!.settings.timeZone));
+                  notify("Package summary copied.");
+                })}>
+                  <Copy size={15} /> Copy summary
+                </button>
                 {detail.shipment.dismissedAt ? (
                   <button
                     className="secondary"

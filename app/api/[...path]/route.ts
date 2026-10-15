@@ -110,7 +110,7 @@ async function handle(
       await query("SELECT 1");
       return json({
         status: "ok",
-        version: "0.1.0",
+        version: "1.3.0",
         build: process.env.APP_BUILD || "local",
         database: "ready",
       });
