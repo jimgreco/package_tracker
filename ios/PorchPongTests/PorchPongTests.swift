@@ -3,6 +3,61 @@ import XCTest
 @testable import PorchPong
 
 final class ModelTests: XCTestCase {
+  func testPackageSearchCombinesDetailsAndRequiresEveryWord() {
+    var shipment = Fixture.shipment(merchant: "Schoolhouse")
+    shipment.carrier = "FedEx"
+    shipment.note = "For the guest room"
+    shipment.orderNumber = "SH-20916"
+    shipment.trackingNumber = "123456789"
+    shipment.items = [
+      PackageItem(name: "Cotton woven throw", quantity: 2),
+      PackageItem(name: "Blue cushion", quantity: 1),
+    ]
+    for search in [
+      "schoolhouse FEDEX throw", "throw schoolhouse fedex", "  SH-20916\tguest\n123456789  ",
+      "blue woven", "Schoolhouse\u{00a0}FedEx", "guest room", "SH-20916",
+    ] {
+      XCTAssertTrue(shipment.matchesSearch(search), search)
+    }
+    for search in ["FedEx blanket", "SH.*", "(throw)", "example.com"] {
+      XCTAssertFalse(shipment.matchesSearch(search), search)
+    }
+    shipment.carrier = nil
+    shipment.note = nil
+    shipment.orderNumber = nil
+    shipment.trackingNumber = nil
+    shipment.items = []
+    for search in ["", "  \t\n", "\u{00a0}"] {
+      XCTAssertTrue(shipment.matchesSearch(search), search)
+    }
+    XCTAssertTrue(shipment.matchesSearch("school"))
+    XCTAssertFalse(shipment.matchesSearch("FedEx"))
+    XCTAssertFalse(shipment.matchesSearch("nil"))
+  }
+
+  func testCombinedSearchKeepsPackageVisibilityAndSnoozedSections() {
+    let shipments = Fixture.dashboard(todaySections: true).shipments
+    XCTAssertEqual(
+      PackageFilter.onTheWay.results(shipments, search: "CDL cotton").map(\.merchant),
+      ["Schoolhouse"])
+    XCTAssertTrue(PackageFilter.onTheWay.results(shipments, search: "CDL Cometeer").isEmpty)
+    XCTAssertEqual(
+      PackageFilter.toCollect.results(shipments, search: "CDL Cometeer").map(\.merchant),
+      ["Cometeer"])
+    XCTAssertTrue(PackageFilter.all.results(shipments, search: "CDL Archived").isEmpty)
+    XCTAssertEqual(
+      PackageFilter.dismissed.results(shipments, search: "CDL Archived").map(\.merchant),
+      ["Archived from view"])
+    let sections = PackageHomeSections(
+      shipments: shipments, filter: .onTheWay, search: "CDL snoozed", zone: "America/New_York",
+      now: Fixture.clock)
+    XCTAssertEqual(sections.snoozed.map(\.merchant), ["Snoozed parcel"])
+    XCTAssertTrue(sections.remaining.isEmpty)
+    XCTAssertTrue(sections.deliveredToday.isEmpty)
+    XCTAssertTrue(sections.expectedToday.isEmpty)
+    XCTAssertTrue(sections.attention.isEmpty)
+  }
+
   func testPackageSummaryPreservesDetailsAndCollectionState() {
     var shipment = Fixture.shipment()
     shipment.status = "delivered"

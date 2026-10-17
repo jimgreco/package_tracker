@@ -169,6 +169,26 @@ import XCTest
     XCTAssertTrue(app.textFields["merchantField"].waitForExistence(timeout: 3))
     screenshot("edit-details")
   }
+  func testCombinedPackageSearchAndClearPreserveFilter() {
+    launch()
+    XCTAssertTrue(app.buttons["packageFilter"].waitForExistence(timeout: 5))
+    app.buttons["packageFilter"].tap()
+    app.buttons["To collect (1)"].tap()
+    let search = app.searchFields.firstMatch
+    search.tap()
+    search.typeText(" cometeer CDL coffee ")
+    XCTAssertTrue(app.staticTexts["Cometeer"].waitForExistence(timeout: 3))
+    XCTAssertFalse(app.staticTexts["Schoolhouse"].exists)
+    XCTAssertFalse(app.staticTexts["Muji"].exists)
+    screenshot("combined-package-search")
+    search.buttons["Clear text"].tap()
+    search.typeText("Cometeer FedEx")
+    XCTAssertTrue(app.staticTexts["No matching packages"].waitForExistence(timeout: 3))
+    screenshot("combined-package-search-no-results")
+    search.buttons["Clear text"].tap()
+    XCTAssertTrue(app.staticTexts["Cometeer"].waitForExistence(timeout: 3))
+    XCTAssertTrue(app.buttons["packageFilter"].label.hasPrefix("To collect"))
+  }
   func testPackagesHomeSections() {
     launch(["--today-sections"])
     let delivered = app.staticTexts["Delivered today"]

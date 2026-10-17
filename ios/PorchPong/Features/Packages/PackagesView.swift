@@ -97,7 +97,8 @@ struct PackagesView: View {
         && sections.attention.isEmpty && sections.remaining.isEmpty && sections.snoozed.isEmpty
       {
         ContentUnavailableView(
-          search.isEmpty ? "No packages here" : "No matching packages",
+          search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "No packages here" : "No matching packages",
           systemImage: "shippingbox",
           description: Text(
             store.loading ? "Loading your household…"
@@ -115,7 +116,7 @@ struct PackagesView: View {
     }
     .scrollContentBackground(.hidden).background(Color.canvas)
     .searchable(
-      text: $search, prompt: "Merchant, note, item, order or tracking"
+      text: $search, prompt: "Shop, carrier, note, item, order or tracking"
     )
     .refreshable { await store.refresh() }
   }

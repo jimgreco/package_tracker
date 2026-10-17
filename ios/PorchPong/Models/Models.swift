@@ -61,10 +61,12 @@ struct Shipment: Codable, Identifiable, Equatable, Sendable {
     dismissedAt == nil && !["delivered", "cancelled", "return_to_sender"].contains(status)
   }
   func matchesSearch(_ search: String) -> Bool {
-    search.isEmpty
-      || [merchant, summary, note ?? "", orderNumber ?? "", trackingNumber ?? ""].contains {
-        $0.localizedCaseInsensitiveContains(search)
-      }
+    let terms = search.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+    let fields = [merchant, carrier ?? "", note ?? "", orderNumber ?? "", trackingNumber ?? ""]
+      + items.map(\.name)
+    return terms.allSatisfy { term in
+      fields.contains { $0.localizedCaseInsensitiveContains(term) }
+    }
   }
   static func newestFirst(_ lhs: Self, _ rhs: Self) -> Bool {
     let left = Dates.instant(lhs.timelineAt) ?? .distantPast

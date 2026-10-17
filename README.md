@@ -5,6 +5,7 @@ A shared household package tracker. Forward a shipping email, review the extract
 ## What is implemented
 
 - Responsive package timeline, search, status filters, manual entry/editing, tracking history, source-email inspection, and duplicate merging.
+- Package search on web and iPhone matches every word across shop, carrier, item, note, order number, and tracking number. Combine details such as `coffee FedEx`; extra spaces and letter case do not affect results. The selected package filter still applies.
 - Separate household, order, item, shipment, email, and tracking-event records in PostgreSQL.
 - Postmark inbound webhook with Basic authentication, private per-household routing, attachment ingestion, durable processing, and retry-safe deduplication.
 - OpenAI Responses API extraction with a strict schema, `store: false`, original-message context, evidence, missing-value handling, and review flags. The model cannot browse or call tools.

@@ -30,6 +30,7 @@ import type {
   Email,
 } from "@/lib/types";
 import { STATUS_LABEL } from "@/lib/types";
+import { matchesPackageSearch } from "@/lib/package-search";
 import {
   dateLabel,
   estimateLabel,
@@ -215,17 +216,7 @@ export default function Page() {
   const all = undismissed.filter((s) => !s.snoozedAt);
   const snoozed = undismissed.filter((s) => s.snoozedAt);
   const matchesSearch = (s: Shipment) =>
-    [
-      s.merchant,
-      s.note,
-      s.orderNumber,
-      s.trackingNumber,
-      ...s.items.map((i) => i.name),
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase()
-      .includes(search.toLowerCase());
+    matchesPackageSearch(s, search);
   const visibleSnoozed = snoozed.filter(matchesSearch);
   async function quickAction(
     s: Shipment,
@@ -502,7 +493,7 @@ export default function Page() {
                         <Search size={17} />
                         <input
                           type="search"
-                          placeholder="Search shops, notes, items, or tracking numbers"
+                          placeholder="Shop, carrier, note, item, order or tracking"
                           value={search}
                           onChange={(e) => setSearch(e.target.value)}
                           aria-label="Search packages"
@@ -720,12 +711,23 @@ export default function Page() {
                       ) : (
                         <Empty
                           title={
-                            all.length || snoozed.length
-                              ? "Nothing here just yet"
-                              : "Your doorstep is clear"
+                            search.trim()
+                              ? visibleSnoozed.length
+                                ? "Your matches are snoozed"
+                                : "No matching packages"
+                              : all.length || snoozed.length
+                                ? "Nothing here just yet"
+                                : "Your doorstep is clear"
                           }
                           action={
-                            all.length ? (
+                            search.trim() ? (
+                              <button
+                                className="secondary"
+                                onClick={() => setSearch("")}
+                              >
+                                Clear search
+                              </button>
+                            ) : all.length ? (
                               <button
                                 className="secondary"
                                 onClick={() => {
@@ -746,11 +748,15 @@ export default function Page() {
                             )
                           }
                         >
-                          {all.length
-                            ? "Try a different filter or search."
-                            : snoozed.length
-                              ? "Your packages are in Snoozed below."
-                              : "Forward a shipping email or add your first package to get started."}
+                          {search.trim()
+                            ? visibleSnoozed.length
+                              ? "Matching packages are in Snoozed below."
+                              : "Try fewer words or clear your search to keep this filter."
+                            : all.length
+                              ? "Try a different filter or search."
+                              : snoozed.length
+                                ? "Your packages are in Snoozed below."
+                                : "Forward a shipping email or add your first package to get started."}
                         </Empty>
                       )}
                     </section>
