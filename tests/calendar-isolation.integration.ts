@@ -241,7 +241,7 @@ test("marking delivered updates the subscribed feed and Google event without los
     assert.equal(markedFeed.match(/BEGIN:VEVENT/g)?.length, 1);
     assert.ok(
       markedFeed.includes(
-        `DTSTART;VALUE=DATE:${recordedDay.toString().replaceAll("-", "")}`,
+        `DTSTART;VALUE=DATE:${originalEstimate.start.replaceAll("-", "")}`,
       ),
     );
     assert.ok(
@@ -253,7 +253,7 @@ test("marking delivered updates the subscribed feed and Google event without los
     await syncShipment(id);
     const deliveredWrite = writes.at(-1)!;
     assert.deepEqual(deliveredWrite.body.start, {
-      date: recordedDay.toString(),
+      date: originalEstimate.start,
     });
     assert.deepEqual(deliveredWrite.body.end, { date: expectedEnd });
 
@@ -264,6 +264,10 @@ test("marking delivered updates the subscribed feed and Google event without los
     assert.equal(edited.statusAt, marked.statusAt);
     assert.equal(edited.deliveredAt, null);
     const editedFeed = await (await feed(owner.feedToken)).text();
+    assert.equal(
+      editedFeed.match(/DTSTART;VALUE=DATE:.+/)?.[0],
+      originalFeed.match(/DTSTART;VALUE=DATE:.+/)?.[0],
+    );
     assert.equal(
       editedFeed.match(/DTEND;VALUE=DATE:.+/)?.[0],
       markedFeed.match(/DTEND;VALUE=DATE:.+/)?.[0],
@@ -309,6 +313,10 @@ test("marking delivered updates the subscribed feed and Google event without los
       id,
     );
     const actualFeed = await (await feed(owner.feedToken)).text();
+    assert.equal(
+      actualFeed.match(/DTSTART;VALUE=DATE:.+/)?.[0],
+      originalFeed.match(/DTSTART;VALUE=DATE:.+/)?.[0],
+    );
     assert.ok(
       actualFeed.includes(
         `DTEND;VALUE=DATE:${recordedDay.toString().replaceAll("-", "")}`,
@@ -319,6 +327,9 @@ test("marking delivered updates the subscribed feed and Google event without los
       originalFeed.match(/UID:.+/)?.[0],
     );
     await syncShipment(id);
+    assert.deepEqual(writes.at(-1)!.body.start, {
+      date: originalEstimate.start,
+    });
     assert.deepEqual(writes.at(-1)!.body.end, { date: recordedDay.toString() });
     assert.equal(writes.filter((write) => write.method === "POST").length, 1);
     const createdId = writes.find((write) => write.method === "POST")!.body.id;

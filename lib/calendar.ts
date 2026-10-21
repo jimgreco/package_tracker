@@ -68,16 +68,23 @@ export function calendarFields(
   let estimate = s.estimate;
   // Quick delivery confirmations leave deliveredAt unknown. Use the recorded
   // status date in that case, never updatedAt (which also changes on later edits).
-  const deliveryDate =
+  const deliveryTimestamp =
     s.status === "delivered" ? s.deliveredAt || s.statusAt : null;
-  if (deliveryDate)
+  if (deliveryTimestamp) {
+    const deliveryDate = dateInZone(deliveryTimestamp, timeZone);
+    // Keep the displayed window start unless delivery predates that window.
     estimate = {
-      kind: "date",
-      start: dateInZone(deliveryDate, timeZone),
-      end: null,
+      kind: "date_range",
+      start:
+        estimate?.kind === "date_range" &&
+        Temporal.PlainDate.compare(estimate.start, deliveryDate) < 0
+          ? estimate.start
+          : deliveryDate,
+      end: deliveryDate,
       timeZone,
       label: null,
     };
+  }
   if (!estimate) return null;
   estimate = normalizeEstimate(estimate)!;
   const itemNames = s.items
@@ -86,8 +93,8 @@ export function calendarFields(
   const lines = [
     itemNames,
     `Status: ${STATUS_LABEL[s.status]}`,
-    deliveryDate && !s.deliveredAt
-      ? "Actual delivery date unknown; calendar shows when delivery was recorded."
+    deliveryTimestamp && !s.deliveredAt
+      ? "Actual delivery date unknown; calendar ends on the date delivery was recorded."
       : "",
     s.orderNumber ? `Order: ${s.orderNumber}` : "",
     s.carrier ? `Carrier: ${s.carrier}` : "",
