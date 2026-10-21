@@ -147,8 +147,8 @@ To see it in Apple Calendar, add your Google account and enable **Package Delive
 - Exact windows use both supplied times and the destination IANA time zone.
 - A single approximate time uses an explicitly described one-minute marker. It does not imply a delivery window.
 - “By 8 PM” is an all-day event with the deadline in the description.
-- No estimate means no event. Clearing an estimate removes a previously synced event.
-- Delivered packages use the actual local delivery date when known. Completed deliveries remain as history.
+- Undelivered packages without an estimate have no event. Clearing their estimate removes a previously synced event.
+- Delivered packages become one-day history events on the actual local delivery date when known, otherwise on the date delivery was recorded. The fallback is disclosed in the event description and does not set an actual delivery timestamp. The exclusive end is the following household-local date, even when the original estimate ends later; later detail edits do not move that date.
 - Cancelled or merged-away shipments remove their Google events; the ICS feed retains a cancelled event with the same UID so subscribed clients can reconcile.
 - A restored event after deletion receives a new provider ID; normal ETA edits preserve the ID.
 - Events show as free and do not create calendar invitations or attendees.

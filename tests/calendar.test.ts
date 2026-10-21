@@ -120,6 +120,162 @@ test("unknown estimates create no events; actual delivery uses household date", 
   );
   assert.equal(event!.start.date, "2026-09-18");
 });
+test("actual delivery replaces the estimate even before or after the original range", () => {
+  for (const [day, end] of [
+    ["2026-10-18", "2026-10-19"],
+    ["2026-10-20", "2026-10-21"],
+    ["2026-10-28", "2026-10-29"],
+  ]) {
+    const original = estimate("date_range", "2026-10-19", "2026-10-25");
+    const delivered = {
+      ...s(),
+      status: "delivered" as const,
+      deliveredAt: `${day}T18:00:00Z`,
+      statusAt: "2026-10-29T18:00:00Z",
+      updatedAt: "2026-10-30T18:00:00Z",
+      estimate: original,
+    };
+    const snapshot = structuredClone(delivered);
+    const event = calendarFields(
+      delivered,
+      "https://doorstep.example",
+      "America/New_York",
+    )!;
+    assert.deepEqual(event.start, { date: day });
+    assert.deepEqual(event.end, { date: end });
+    assert.doesNotMatch(event.description, /date unknown/);
+    assert.deepEqual(
+      delivered,
+      snapshot,
+      "calendar projection preserves source history",
+    );
+  }
+});
+test("delivery without an actual timestamp uses the recorded status date, not later edits", () => {
+  for (const original of [
+    estimate("date_range", "2026-10-19", "2026-10-25"),
+    estimate("date", "2026-10-25"),
+    null,
+  ]) {
+    const event = calendarFields(
+      {
+        ...s(),
+        status: "delivered",
+        deliveredAt: null,
+        statusAt: "2026-10-21T01:00:00Z",
+        updatedAt: "2026-10-28T12:00:00Z",
+        estimate: original,
+      },
+      "https://doorstep.example",
+      "America/New_York",
+    )!;
+    assert.deepEqual(event.start, { date: "2026-10-20" });
+    assert.deepEqual(event.end, { date: "2026-10-21" });
+    assert.match(
+      event.description,
+      /Actual delivery date unknown; calendar shows when delivery was recorded\./,
+    );
+  }
+});
+test("delivered calendar dates handle timezone, DST, month, year, and leap-day boundaries", () => {
+  const cases = [
+    ["2026-10-21T01:00:00Z", "America/New_York", "2026-10-20", "2026-10-21"],
+    ["2026-10-21T12:30:00Z", "Pacific/Kiritimati", "2026-10-22", "2026-10-23"],
+    ["2026-10-21T09:30:00Z", "Pacific/Honolulu", "2026-10-20", "2026-10-21"],
+    [
+      "2026-03-08T03:30:00-04:00",
+      "America/New_York",
+      "2026-03-08",
+      "2026-03-09",
+    ],
+    [
+      "2026-11-01T01:30:00-04:00",
+      "America/New_York",
+      "2026-11-01",
+      "2026-11-02",
+    ],
+    [
+      "2026-11-01T01:30:00-05:00",
+      "America/New_York",
+      "2026-11-01",
+      "2026-11-02",
+    ],
+    ["2027-01-01T02:00:00Z", "America/New_York", "2026-12-31", "2027-01-01"],
+    ["2028-03-01T02:00:00Z", "America/New_York", "2028-02-29", "2028-03-01"],
+  ];
+  for (const [timestamp, zone, start, end] of cases) {
+    for (const deliveredAt of [timestamp, null]) {
+      const event = calendarFields(
+        {
+          ...s(),
+          status: "delivered",
+          deliveredAt,
+          statusAt: timestamp,
+          estimate: estimate("date_range", "2026-10-19", "2026-10-25"),
+        },
+        "https://doorstep.example",
+        zone,
+      )!;
+      assert.deepEqual(event.start, { date: start }, `${zone}: ${timestamp}`);
+      assert.deepEqual(event.end, { date: end }, `${zone}: ${timestamp}`);
+    }
+  }
+});
+test("undelivered shipments retain their estimated range regardless of status timestamp", () => {
+  const event = calendarFields(
+    {
+      ...s(),
+      status: "in_transit",
+      statusAt: "2026-10-20T18:00:00Z",
+      estimate: estimate("date_range", "2026-10-19", "2026-10-25"),
+    },
+    "https://doorstep.example",
+    "America/New_York",
+  )!;
+  assert.deepEqual(event.start, { date: "2026-10-19" });
+  assert.deepEqual(event.end, { date: "2026-10-26" });
+  assert.doesNotMatch(event.description, /delivery was recorded/);
+});
+test("marking delivered shortens the ICS event in place and advances its revision", () => {
+  const pending = {
+    ...s(),
+    status: "in_transit" as const,
+    estimate: estimate("date_range", "2026-10-19", "2026-10-25"),
+    statusAt: "2026-10-19T12:00:00Z",
+    updatedAt: "2026-10-19T12:00:00Z",
+  };
+  const before = calendarFeed(
+    [pending],
+    "https://doorstep.example",
+    "America/New_York",
+  );
+  const after = calendarFeed(
+    [
+      {
+        ...pending,
+        status: "delivered",
+        statusAt: "2026-10-21T01:00:00Z",
+        updatedAt: "2026-10-21T01:00:00Z",
+      },
+    ],
+    "https://doorstep.example",
+    "America/New_York",
+  );
+  assert.equal(before.match(/UID:.+/)?.[0], after.match(/UID:.+/)?.[0]);
+  assert.equal(after.match(/BEGIN:VEVENT/g)?.length, 1);
+  assert.match(before, /DTEND;VALUE=DATE:20261026\r\n/);
+  assert.match(
+    after,
+    /DTSTART;VALUE=DATE:20261020\r\nDTEND;VALUE=DATE:20261021\r\n/,
+  );
+  assert.match(after, /SUMMARY:Delivered/);
+  assert.match(after, /STATUS:CONFIRMED/);
+  assert.match(after, /LAST-MODIFIED:20261021T010000Z/);
+  assert.ok(
+    Number(after.match(/SEQUENCE:(\d+)/)![1]) >
+      Number(before.match(/SEQUENCE:(\d+)/)![1]),
+  );
+});
 test("ICS keeps UIDs stable, escapes untrusted text, and folds UTF-8 lines", () => {
   const one = {
     ...s(),

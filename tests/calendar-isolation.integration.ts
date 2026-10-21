@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import pg from "pg";
+import { Temporal } from "@js-temporal/polyfill";
 import { pool, query } from "../lib/db";
 import { randomToken, encrypt } from "../lib/security";
 import { type Context } from "../lib/auth";
@@ -13,7 +14,12 @@ import {
   disconnectGoogle,
   syncShipment,
 } from "../lib/google";
-import { saveManual } from "../lib/shipments";
+import {
+  quickShipmentAction,
+  saveManual,
+  shipment as readShipment,
+  updateShipmentNote,
+} from "../lib/shipments";
 import { GET } from "../app/api/[...path]/route";
 
 const dbUrl = new URL(process.env.DATABASE_URL!);
@@ -149,6 +155,192 @@ async function shipment(ctx: Context) {
     ctx,
   );
 }
+
+test("marking delivered updates the subscribed feed and Google event without losing history", async () => {
+  const { owner } = await household();
+  const id = await shipment(owner);
+  const today = Temporal.Now.plainDateISO(owner.timeZone);
+  const originalEstimate = {
+    kind: "date_range",
+    start: today.subtract({ days: 2 }).toString(),
+    end: today.add({ days: 7 }).toString(),
+    timeZone: owner.timeZone,
+    label: "Original delivery estimate",
+  };
+  await query("UPDATE shipments SET estimate=$2 WHERE id=$1", [
+    id,
+    originalEstimate,
+  ]);
+  const historyBefore = await query(
+    "SELECT id FROM tracking_events WHERE shipment_id=$1",
+    [id],
+  );
+  const originalFeed = await (await feed(owner.feedToken)).text();
+  assert.ok(
+    originalFeed.includes(
+      `DTEND;VALUE=DATE:${today.add({ days: 8 }).toString().replaceAll("-", "")}`,
+    ),
+  );
+  await connectCalendar(owner);
+
+  const previousFetch = globalThis.fetch;
+  const writes: {
+    url: string;
+    method: string;
+    body: Record<string, unknown>;
+  }[] = [];
+  let exists = false;
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    if (url === "https://oauth2.googleapis.com/token") return calendarTokens();
+    assert.ok(
+      url.startsWith(
+        "https://www.googleapis.com/calendar/v3/calendars/fixture-calendar/events",
+      ),
+    );
+    const method = init?.method || "GET";
+    assert.ok(
+      ["PUT", "POST"].includes(method),
+      "delivery must update, never delete, the event",
+    );
+    writes.push({ url, method, body: JSON.parse(String(init?.body)) });
+    if (method === "PUT" && !exists) return Response.json({}, { status: 404 });
+    exists = true;
+    return Response.json({ id: "fixture-event" });
+  };
+  try {
+    await syncShipment(id);
+    await quickShipmentAction(id, owner, "deliver");
+    const marked = (await readShipment(id, owner.householdId)).shipment;
+    const recordedDay = Temporal.Instant.from(marked.statusAt)
+      .toZonedDateTimeISO(owner.timeZone)
+      .toPlainDate();
+    const expectedEnd = recordedDay.add({ days: 1 }).toString();
+    assert.equal(
+      marked.deliveredAt,
+      null,
+      "confirmation must not invent an actual delivery timestamp",
+    );
+    assert.deepEqual(marked.estimate, originalEstimate);
+    const response = await feed(owner.feedToken);
+    assert.equal(
+      response.status,
+      200,
+      "the existing subscription remains usable",
+    );
+    assert.equal(
+      response.headers.get("content-type"),
+      "text/calendar; charset=utf-8",
+    );
+    assert.equal(response.headers.get("cache-control"), "private, max-age=60");
+    const markedFeed = await response.text();
+    assert.equal(
+      markedFeed.match(/UID:.+/)?.[0],
+      originalFeed.match(/UID:.+/)?.[0],
+    );
+    assert.equal(markedFeed.match(/BEGIN:VEVENT/g)?.length, 1);
+    assert.ok(
+      markedFeed.includes(
+        `DTSTART;VALUE=DATE:${recordedDay.toString().replaceAll("-", "")}`,
+      ),
+    );
+    assert.ok(
+      markedFeed.includes(
+        `DTEND;VALUE=DATE:${expectedEnd.replaceAll("-", "")}`,
+      ),
+    );
+    assert.match(markedFeed, /SUMMARY:Delivered/);
+    await syncShipment(id);
+    const deliveredWrite = writes.at(-1)!;
+    assert.deepEqual(deliveredWrite.body.start, {
+      date: recordedDay.toString(),
+    });
+    assert.deepEqual(deliveredWrite.body.end, { date: expectedEnd });
+
+    await updateShipmentNote(id, owner, "Kept on the porch");
+    await quickShipmentAction(id, owner, "collect");
+    await quickShipmentAction(id, owner, "deliver");
+    const edited = (await readShipment(id, owner.householdId)).shipment;
+    assert.equal(edited.statusAt, marked.statusAt);
+    assert.equal(edited.deliveredAt, null);
+    const editedFeed = await (await feed(owner.feedToken)).text();
+    assert.equal(
+      editedFeed.match(/DTEND;VALUE=DATE:.+/)?.[0],
+      markedFeed.match(/DTEND;VALUE=DATE:.+/)?.[0],
+    );
+    const historyAfter = await query(
+      "SELECT id,event_key FROM tracking_events WHERE shipment_id=$1",
+      [id],
+    );
+    assert.ok(
+      historyBefore.every((row) =>
+        historyAfter.some((saved) => saved.id === row.id),
+      ),
+    );
+    assert.equal(
+      historyAfter.filter((row) => row.event_key.startsWith("manual:deliver:"))
+        .length,
+      1,
+    );
+
+    // Supplying the actual timestamp later supersedes the confirmation date.
+    const actualDay = recordedDay.subtract({ days: 1 });
+    const actualTimestamp = actualDay
+      .toZonedDateTime({ timeZone: owner.timeZone, plainTime: "12:00" })
+      .toInstant()
+      .toString();
+    await saveManual(
+      {
+        merchant: edited.merchant,
+        orderNumber: edited.orderNumber,
+        orderedAt: edited.orderedAt,
+        items: edited.items,
+        note: edited.note,
+        carrier: edited.carrier,
+        trackingNumber: edited.trackingNumber,
+        trackingUrl: edited.trackingUrl,
+        status: edited.status,
+        shippedAt: edited.shippedAt,
+        estimate: edited.estimate,
+        deliveredAt: actualTimestamp,
+        manualOverride: edited.manualOverride,
+      },
+      owner,
+      id,
+    );
+    const actualFeed = await (await feed(owner.feedToken)).text();
+    assert.ok(
+      actualFeed.includes(
+        `DTEND;VALUE=DATE:${recordedDay.toString().replaceAll("-", "")}`,
+      ),
+    );
+    assert.equal(
+      actualFeed.match(/UID:.+/)?.[0],
+      originalFeed.match(/UID:.+/)?.[0],
+    );
+    await syncShipment(id);
+    assert.deepEqual(writes.at(-1)!.body.end, { date: recordedDay.toString() });
+    assert.equal(writes.filter((write) => write.method === "POST").length, 1);
+    const createdId = writes.find((write) => write.method === "POST")!.body.id;
+    assert.ok(
+      writes
+        .filter((write) => write.method === "PUT")
+        .every((write) => write.url.endsWith(`/${createdId}`)),
+    );
+    const [savedEvent] = await query(
+      "SELECT event_id,is_deleted FROM calendar_events WHERE shipment_id=$1",
+      [id],
+    );
+    assert.equal(savedEvent.event_id, createdId);
+    assert.equal(savedEvent.is_deleted, false);
+    assert.deepEqual(
+      (await readShipment(id, owner.householdId)).shipment.estimate,
+      originalEstimate,
+    );
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
 
 test("removing a household member revokes their previously copied calendar feed", async () => {
   const { owner, member } = await household();

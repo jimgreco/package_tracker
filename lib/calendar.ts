@@ -66,10 +66,14 @@ export function calendarFields(
 ): CalendarFields | null {
   if (s.dismissedAt || s.archivedAt) return null;
   let estimate = s.estimate;
-  if (s.status === "delivered" && s.deliveredAt)
+  // Quick delivery confirmations leave deliveredAt unknown. Use the recorded
+  // status date in that case, never updatedAt (which also changes on later edits).
+  const deliveryDate =
+    s.status === "delivered" ? s.deliveredAt || s.statusAt : null;
+  if (deliveryDate)
     estimate = {
       kind: "date",
-      start: dateInZone(s.deliveredAt, timeZone),
+      start: dateInZone(deliveryDate, timeZone),
       end: null,
       timeZone,
       label: null,
@@ -82,6 +86,9 @@ export function calendarFields(
   const lines = [
     itemNames,
     `Status: ${STATUS_LABEL[s.status]}`,
+    deliveryDate && !s.deliveredAt
+      ? "Actual delivery date unknown; calendar shows when delivery was recorded."
+      : "",
     s.orderNumber ? `Order: ${s.orderNumber}` : "",
     s.carrier ? `Carrier: ${s.carrier}` : "",
     s.trackingNumber ? `Tracking: ${s.trackingNumber}` : "",
