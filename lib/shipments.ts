@@ -159,7 +159,7 @@ export async function settings(ctx: Context): Promise<Settings> {
     },
     worker: { lastSeenAt: iso(w?.last_seen_at), failedJobs: dead?.count || 0 },
     userName: ctx.name,
-    account: { email: account?.google_email || ctx.email },
+    account: { id: ctx.userId, email: account?.google_email || ctx.email },
     householdId: ctx.householdId,
     role: households.find((h) => h.id === ctx.householdId)?.role || "member",
     households: households as Settings["households"],

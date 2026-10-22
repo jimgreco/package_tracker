@@ -1122,6 +1122,26 @@ footer > span:first-child {
 .search-box input::placeholder {
   color: #9aa5b6;
 }
+
+.package-list-preferences {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 4px 0 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.package-list-preferences button {
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 8px;
+  background: none;
+  border: 0;
+  color: var(--blue);
+  text-decoration: underline;
+}
+.package-list-preferences button:disabled { opacity: .5; }
 .review-indicator {
   display: flex;
   color: #ae7927;

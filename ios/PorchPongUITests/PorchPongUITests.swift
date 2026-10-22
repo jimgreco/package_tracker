@@ -49,6 +49,64 @@ import XCTest
     app.buttons["Set up later"].tap()
     XCTAssertTrue(app.buttons["Show app walkthrough"].waitForExistence(timeout: 3))
   }
+  func testListPreferencesSurviveRelaunchAndReset() {
+    launch(["--persist-list-preferences", "--reset-list-preferences"])
+    XCTAssertTrue(app.buttons["packageFilter"].waitForExistence(timeout: 5))
+    app.buttons["packageFilter"].tap()
+    app.buttons["To collect (1)"].tap()
+    let search = app.searchFields.firstMatch
+    app.swipeDown()
+    XCTAssertTrue(search.waitForExistence(timeout: 5))
+    search.tap()
+    search.typeText("Cometeer")
+    app.terminate()
+    launch(["--persist-list-preferences"])
+    XCTAssertTrue(app.buttons["packageFilter"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["packageFilter"].label.hasPrefix("To collect"))
+    app.swipeDown()
+    XCTAssertEqual(app.searchFields.firstMatch.value as? String, "Cometeer")
+    XCTAssertTrue(app.staticTexts["Cometeer"].exists)
+    screenshot("remembered-list-after-relaunch")
+    app.buttons["resetPackageList"].tap()
+    XCTAssertTrue(app.buttons["packageFilter"].label.hasPrefix("On the way"))
+    XCTAssertFalse(app.buttons["resetPackageList"].isEnabled)
+    app.terminate()
+    launch(["--persist-list-preferences"])
+    XCTAssertTrue(app.buttons["packageFilter"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["packageFilter"].label.hasPrefix("On the way"))
+    XCTAssertFalse(app.buttons["resetPackageList"].isEnabled)
+    screenshot("remembered-list-reset")
+  }
+  func testListPreferencesLargeTextReset() throws {
+    launch(["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"])
+    XCTAssertTrue(app.buttons["packageFilter"].waitForExistence(timeout: 5))
+    app.buttons["packageFilter"].tap()
+    app.buttons["To collect (1)"].tap()
+    for _ in 0..<8 where !app.buttons["resetPackageList"].isHittable {
+      app.swipeUp(velocity: .slow)
+    }
+    XCTAssertTrue(app.buttons["resetPackageList"].isHittable)
+    XCTAssertGreaterThanOrEqual(app.buttons["resetPackageList"].frame.height, 44)
+    screenshot("remembered-list-large-text")
+    try app.performAccessibilityAudit(for: [.textClipped, .sufficientElementDescription]) { issue in
+      // iOS 26.2 flags its system search field even with a fully visible one-word
+      // prompt. Reproduced on released 44c16d8; cropped audit screenshots inspected.
+      // Keep every Reset/helper finding and all description checks actionable.
+      let system = ProcessInfo.processInfo.operatingSystemVersion
+      let knownSystemField = system.majorVersion == 26 && system.minorVersion == 2
+        && issue.auditType == .textClipped && issue.element?.elementType == .searchField
+        && issue.element?.label == "Search"
+      if knownSystemField {
+        let evidence = XCTAttachment(string: "Known iOS 26.2 system search-field textClipped finding; visually inspected. " + issue.detailedDescription)
+        evidence.name = "known-system-search-audit-finding"
+        evidence.lifetime = .keepAlways
+        self.add(evidence)
+      }
+      return knownSystemField
+    }
+    app.buttons["resetPackageList"].tap()
+    XCTAssertTrue(app.buttons["packageFilter"].label.hasPrefix("On the way"))
+  }
   func testWalkthroughLargeText() {
     launch([
       "--walkthrough", "-UIPreferredContentSizeCategoryName",

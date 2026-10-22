@@ -32,6 +32,8 @@
 		C851CFA315FA3DE6E8BFFBEC /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95D453FE00DDDA00BB7F4352 /* SettingsView.swift */; };
 		D26AC2BDF949FF2495056C56 /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32DDB3E56CEF47C3F07E1B26 /* Keychain.swift */; };
 		EE7B669ABE850192BC47A940 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = C46D47423641BC3DDF5C6677 /* Models.swift */; };
+		980E6325E98B126959FD05F8 /* PackageListPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7847CB73446A817A7C6B4A4F /* PackageListPreferences.swift */; };
+		8B8F25E8CEFDB7BC27340E9B /* PackageListPreferencesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4ACAE06F4BF49BC8FCF4420 /* PackageListPreferencesTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -81,6 +83,8 @@
 		F2F3FD3D80936FC4B66C6015 /* GoogleSignIn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleSignIn.swift; sourceTree = "<group>"; };
 		FADD281A8956344A1632A44F /* PackageForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackageForm.swift; sourceTree = "<group>"; };
 		FC5343C4F5E8B4E9293C89BD /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		7847CB73446A817A7C6B4A4F /* PackageListPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackageListPreferences.swift; sourceTree = "<group>"; };
+		B4ACAE06F4BF49BC8FCF4420 /* PackageListPreferencesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackageListPreferencesTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -89,6 +93,7 @@
 			children = (
 				43D464841728EBFAD42E0CBB /* PorchPongTests.swift */,
 				3ED56919219F265CA310A329 /* NetworkingTests.swift */,
+				B4ACAE06F4BF49BC8FCF4420 /* PackageListPreferencesTests.swift */,
 			);
 			path = PorchPongTests;
 			sourceTree = "<group>";
@@ -224,6 +229,7 @@
 			isa = PBXGroup;
 			children = (
 				7A30B630A07992B7744996B3 /* PackageCache.swift */,
+				7847CB73446A817A7C6B4A4F /* PackageListPreferences.swift */,
 			);
 			path = Persistence;
 			sourceTree = "<group>";
@@ -378,6 +384,7 @@
 				D26AC2BDF949FF2495056C56 /* Keychain.swift in Sources */,
 				EE7B669ABE850192BC47A940 /* Models.swift in Sources */,
 				1B61545F4942B3487A18F73C /* PackageCache.swift in Sources */,
+				980E6325E98B126959FD05F8 /* PackageListPreferences.swift in Sources */,
 				4A1D3F7156BC47E68F9D2301 /* PackageCalendarView.swift in Sources */,
 				7C382FB22589F6CC39E205EE /* PackageDetailView.swift in Sources */,
 				59E823E0B5134426B7CCBBA2 /* PackageForm.swift in Sources */,
@@ -395,6 +402,7 @@
 			files = (
 				9D147656A37BB81C7F1CD233 /* PorchPongTests.swift in Sources */,
 				A40360F4281D83F47B523E47 /* NetworkingTests.swift in Sources */,
+				8B8F25E8CEFDB7BC27340E9B /* PackageListPreferencesTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

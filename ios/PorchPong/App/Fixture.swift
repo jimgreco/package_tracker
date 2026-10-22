@@ -132,6 +132,11 @@
       let cache = PackageCache(
         directory: FileManager.default.temporaryDirectory.appendingPathComponent("PorchPongFixture"))
       let dashboard = dashboard(todaySections: todaySections)
+      let preferences = PackageListPreferencesStore(
+        directory: FileManager.default.temporaryDirectory.appendingPathComponent("PorchPongListPreferencesFixture"))
+      if args.contains("--reset-list-preferences") {
+        try? FileManager.default.removeItem(at: preferences.directory)
+      }
       if args.contains("--offline") {
         try? cache.save(
           PackageSnapshot(
@@ -141,7 +146,9 @@
       }
       return AppStore(
         api: api, session: args.contains("--signed-out") ? nil : session, cache: cache,
-        persistent: false, now: { clock })
+        persistent: false,
+        listPreferencesStore: args.contains("--persist-list-preferences") ? preferences : nil,
+        now: { clock })
     }
   }
   actor FixtureAPI: PorchPongAPI {

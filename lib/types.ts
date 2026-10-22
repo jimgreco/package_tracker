@@ -123,7 +123,7 @@ export type Settings = {
   };
   worker: { lastSeenAt: string | null; failedJobs: number };
   userName: string;
-  account: { email: string };
+  account: { id?: string; email: string };
   householdId: string;
   role: "owner" | "member";
   households: { id: string; name: string; role: "owner" | "member" }[];

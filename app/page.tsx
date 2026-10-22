@@ -1,5 +1,5 @@
 "use client";
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import {
   Package,
   ArrowUpRight,
@@ -31,6 +31,8 @@ import type {
 } from "@/lib/types";
 import { STATUS_LABEL } from "@/lib/types";
 import { matchesPackageSearch } from "@/lib/package-search";
+import { DEFAULT_PACKAGE_LIST, PACKAGE_FILTERS, packageListKey } from "@/lib/package-list-preferences";
+import { usePackageListPreferences } from "./use-package-list-preferences";
 import {
   dateLabel,
   estimateLabel,
@@ -50,6 +52,7 @@ import {
   MerchantTile,
   Spinner,
   Empty,
+  APIError,
   api,
 } from "./components";
 import { CalendarView, InboxView, SettingsView } from "./views";
@@ -59,8 +62,11 @@ type View = "packages" | "calendar" | "inbox" | "settings";
 export default function Page() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [view, setView] = useState<View>("packages");
-  const [filter, setFilter] = useState("On the way");
-  const [search, setSearch] = useState("");
+  const { filter, search, update: updateList } = usePackageListPreferences(
+    data ? packageListKey(data.settings.account.id, data.settings.householdId) : null,
+  );
+  const setFilter = (filter: typeof DEFAULT_PACKAGE_LIST.filter) => updateList({ filter });
+  const setSearch = (search: string) => updateList({ search });
   const [initialError, setInitialError] = useState("");
   const [auth, setAuth] = useState(false);
   const [authError, setAuthError] = useState("");
@@ -76,6 +82,24 @@ export default function Page() {
     message: string;
     error: boolean;
   } | null>(null);
+  const dashboardEpoch = useRef(0);
+  const clearDashboardView = useCallback(() => {
+    setData(null);
+    setSelected(null);
+    setDetail(null);
+    setDetailError("");
+    setForm(null);
+    setPaste(false);
+    setEmail(null);
+    setMerge(false);
+    setToast(null);
+  }, []);
+  const clearAuthenticatedView = useCallback(() => {
+    dashboardEpoch.current += 1;
+    clearDashboardView();
+    setInitialError("");
+    setAuth(true);
+  }, [clearDashboardView]);
   const notify = useCallback(
     (message: string, error = false) => setToast({ message, error }),
     [],
@@ -92,18 +116,26 @@ export default function Page() {
         : current,
     );
   }, []);
-  const reload = useCallback(async () => {
+  const reload = useCallback(async (clearScope = false) => {
+    // A household switch or newer poll owns the next visible snapshot.
+    const epoch = ++dashboardEpoch.current;
+    if (clearScope === true) {
+      clearDashboardView();
+      setInitialError("");
+    }
     try {
       const next = await api<DashboardData>("dashboard");
+      if (epoch !== dashboardEpoch.current) return;
       setData(next);
       setInitialError("");
     } catch (e) {
+      if (epoch !== dashboardEpoch.current) return;
       const message =
         e instanceof Error ? e.message : "Could not load your household.";
-      if (message === "Sign in to your household.") setAuth(true);
+      if (e instanceof APIError && e.status === 401) clearAuthenticatedView();
       else setInitialError(message);
     }
-  }, []);
+  }, [clearAuthenticatedView, clearDashboardView]);
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
     const v = p.get("view");
@@ -208,8 +240,7 @@ export default function Page() {
   }
   async function logout() {
     await api("auth/logout", {});
-    setData(null);
-    setAuth(true);
+    clearAuthenticatedView();
   }
   const today = data ? todayInZone(data.settings.timeZone) : "";
   const undismissed = (data?.shipments || []).filter((s) => !s.dismissedAt);
@@ -462,13 +493,7 @@ export default function Page() {
                     <section>
                       <div className="toolbar">
                         <div className="tabs" aria-label="Filter packages">
-                          {[
-                            "On the way",
-                            "Delivered",
-                            "To collect",
-                            "Dismissed",
-                            "All packages",
-                          ].map((t) => (
+                          {PACKAGE_FILTERS.map((t) => (
                             <button
                               key={t}
                               className={filter === t ? "selected" : ""}
@@ -493,11 +518,19 @@ export default function Page() {
                         <Search size={17} />
                         <input
                           type="search"
+                          maxLength={256}
                           placeholder="Shop, carrier, note, item, order or tracking"
                           value={search}
                           onChange={(e) => setSearch(e.target.value)}
                           aria-label="Search packages"
                         />
+                      </div>
+                      <div className="package-list-preferences">
+                        <span>Remembers your search and filter on this device.</span>
+                        <button type="button" onClick={() => updateList(DEFAULT_PACKAGE_LIST)}
+                          disabled={filter === DEFAULT_PACKAGE_LIST.filter && !search}>
+                          Reset list
+                        </button>
                       </div>
                       {visible.length ? (
                         <div className="shipment-list">

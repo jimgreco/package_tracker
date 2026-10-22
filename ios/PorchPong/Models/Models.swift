@@ -77,7 +77,7 @@ struct Shipment: Codable, Identifiable, Equatable, Sendable {
     return lc == rc ? lhs.id > rhs.id : lc > rc
   }
 }
-enum PackageFilter: String, CaseIterable, Identifiable {
+enum PackageFilter: String, CaseIterable, Identifiable, Sendable {
   case onTheWay = "On the way"
   case delivered = "Delivered"
   case toCollect = "To collect"

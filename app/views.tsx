@@ -257,7 +257,7 @@ export function SettingsView({
   logout,
 }: {
   settings: Settings;
-  reload: () => Promise<void>;
+  reload: (clearScope?: boolean) => Promise<void>;
   notify: (message: string, error?: boolean) => void;
   connect: () => Promise<void>;
   auth: () => void;
@@ -331,7 +331,7 @@ export function SettingsView({
                     await api("settings/household-switch", {
                       householdId: e.target.value,
                     });
-                    await reload();
+                    await reload(true);
                   })
                 }
               >

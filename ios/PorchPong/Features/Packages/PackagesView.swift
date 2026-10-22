@@ -7,9 +7,16 @@ private enum PackageDisplay: String, CaseIterable {
 
 struct PackagesView: View {
   @Environment(AppStore.self) private var store
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @State private var display = PackageDisplay.list
-  @State private var filter = PackageFilter.onTheWay
-  @State private var search = ""
+  private var filter: PackageFilter { store.listPreferences.filter }
+  private var search: String { store.listPreferences.search }
+  private var filterBinding: Binding<PackageFilter> {
+    Binding(get: { filter }, set: { store.updateListPreferences(filter: $0) })
+  }
+  private var searchBinding: Binding<String> {
+    Binding(get: { search }, set: { store.updateListPreferences(search: $0) })
+  }
   @State private var adding = false
   var body: some View {
     VStack(spacing: 0) {
@@ -56,7 +63,7 @@ struct PackagesView: View {
           )
             .font(.caption).foregroundStyle(.secondary)
           Menu {
-            Picker("Package filter", selection: $filter) {
+            Picker("Package filter", selection: filterBinding) {
               ForEach(PackageFilter.allCases) { option in
                 Text("\(option.rawValue) (\(option.results(store.shipments).count))").tag(option)
               }
@@ -67,6 +74,18 @@ struct PackagesView: View {
               systemImage: "line.3.horizontal.decrease"
             ).font(.subheadline).frame(minHeight: 44)
           }.accessibilityIdentifier("packageFilter")
+          preferencesLayout {
+            Text("Remembers your search and filter on this device.")
+              .font(.caption).foregroundStyle(.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+            if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 0) }
+            Button("Reset list") { store.resetListPreferences() }
+              .font(.caption).frame(minHeight: 44)
+              .fixedSize(horizontal: true, vertical: false)
+              .buttonStyle(.borderless)
+              .disabled(store.listPreferences.isDefault)
+              .accessibilityIdentifier("resetPackageList")
+          }
         }
       }.listRowBackground(Color.clear)
       if filter == .onTheWay {
@@ -116,9 +135,17 @@ struct PackagesView: View {
     }
     .scrollContentBackground(.hidden).background(Color.canvas)
     .searchable(
-      text: $search, prompt: "Shop, carrier, note, item, order or tracking"
+      text: searchBinding,
+      prompt: dynamicTypeSize.isAccessibilitySize
+        ? "Search" : "Shop, carrier, note, item, order or tracking"
     )
     .refreshable { await store.refresh() }
+  }
+
+  private var preferencesLayout: AnyLayout {
+    dynamicTypeSize.isAccessibilitySize
+      ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+      : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
   }
 
   private func packageLink(_ shipment: Shipment) -> some View {

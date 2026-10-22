@@ -8,6 +8,11 @@ Gmail management opens the website and may require a separate website login.
 Google Calendar has native Connect/Reconnect, Sync now, and Disconnect controls.
 Its consent browser returns directly to the app; Gmail setup stays on the website.
 
+The package list remembers its search and filter on this iPhone for each account
+and household. Reset list clears that selection. Preferences survive relaunch and
+sign-out, but another account or household cannot see them. They stay in protected,
+backup-excluded files; unavailable storage leaves searching usable in memory.
+
 ## Project and configuration
 
 - Xcode 26.2 (17C52), iOS 26.2 SDK; XcodeGen is installed locally.
@@ -164,3 +169,11 @@ can be skipped; progress is saved on this iPhone per account and household.
 Reopen it from Settings → Getting started → Show app walkthrough. Notification
 permission and Calendar consent use the same system flows as Settings; skipping
 never enables either service. The website has no new onboarding flow.
+
+The package-list XXXL UI test retains one narrowly scoped iOS 26.2 audit
+exception: `textClipped` on the system search field labeled `Search`. The same
+finding was reproduced on released source `44c16d8`, and the audit's cropped
+screenshot showed the single-word prompt fully visible. All Reset/helper
+clipping, accessibility-description and minimum touch-target checks remain
+active. This is a documented platform audit limitation, not a fully clean audit
+of that system field.

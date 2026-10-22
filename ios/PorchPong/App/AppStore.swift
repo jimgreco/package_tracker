@@ -6,8 +6,16 @@ import Observation
   let now: @Sendable () -> Date
   private let cache: PackageCache
   private let persistent: Bool
+  private let listPreferencesStore: PackageListPreferencesStore?
   private let vault = CredentialVault()
-  var session: NativeSession?
+  var session: NativeSession? {
+    didSet {
+      if oldValue?.userId != session?.userId || oldValue?.householdId != session?.householdId {
+        loadListPreferences()
+      }
+    }
+  }
+  private(set) var listPreferences = PackageListPreferences()
   var dashboard: Dashboard?
   var snapshot: PackageSnapshot?
   var details: [String: PackageDetail] = [:]
@@ -34,11 +42,13 @@ import Observation
   init(
     api: any PorchPongAPI = APIClient(), session: NativeSession? = nil,
     cache: PackageCache = PackageCache(), persistent: Bool = true,
+    listPreferencesStore: PackageListPreferencesStore? = nil,
     now: @escaping @Sendable () -> Date = { Date() }
   ) {
     self.api = api
     self.cache = cache
     self.persistent = persistent
+    self.listPreferencesStore = listPreferencesStore ?? (persistent ? PackageListPreferencesStore() : nil)
     self.now = now
     self.session = session ?? (persistent ? vault.load() : nil)
     if let current = self.session {
@@ -53,6 +63,24 @@ import Observation
         offline = snapshot != nil
       }
     }
+    loadListPreferences()
+  }
+  private func loadListPreferences() {
+    guard let session else {
+      listPreferences = PackageListPreferences()
+      return
+    }
+    listPreferences = listPreferencesStore?.load(user: session.userId, household: session.householdId)
+      ?? PackageListPreferences()
+  }
+  func updateListPreferences(filter: PackageFilter? = nil, search: String? = nil) {
+    guard let session else { return }
+    if let filter { listPreferences.filter = filter }
+    if let search { listPreferences.search = String(search.prefix(256)) }
+    listPreferencesStore?.save(listPreferences, user: session.userId, household: session.householdId)
+  }
+  func resetListPreferences() {
+    updateListPreferences(filter: .onTheWay, search: "")
   }
   func start() async {
     await api.configure(session)

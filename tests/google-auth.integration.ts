@@ -394,6 +394,7 @@ test("existing accounts can join another household and switch without mixing pac
   assert.equal(authError(response), null);
   const session = authSession(response)!;
   let data = await (await call("dashboard", undefined, session)).json();
+  assert.equal(data.settings.account.id, member.id);
   assert.equal(data.settings.households.length, 2);
   assert.equal(data.settings.householdId, originalHousehold);
   assert.equal(
@@ -401,6 +402,7 @@ test("existing accounts can join another household and switch without mixing pac
     200,
   );
   data = await (await call("dashboard", undefined, session)).json();
+  assert.equal(data.settings.account.id, member.id);
   assert.equal(data.settings.householdId, householdId);
   assert.equal(data.settings.role, "member");
   assert.equal(

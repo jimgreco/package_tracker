@@ -9,6 +9,11 @@ import {
   timestampValue,
 } from "@/lib/manual-form";
 import { STATUSES, STATUS_LABEL } from "@/lib/types";
+export class APIError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
+}
 export async function api<T = Record<string, unknown>>(
   path: string,
   body?: unknown,
@@ -23,7 +28,7 @@ export async function api<T = Record<string, unknown>>(
   });
   const result = await response.json();
   if (!response.ok)
-    throw new Error(result.error || "Could not complete this request.");
+    throw new APIError(result.error || "Could not complete this request.", response.status);
   return result as T;
 }
 export function Modal({

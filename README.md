@@ -2,6 +2,10 @@
 
 A shared household package tracker. Forward a shipping email, review the extracted order and shipments, and follow delivery updates on the web and in Google Calendar (including Apple Calendar through your Google account).
 
+## Remembered package lists
+
+Web and iPhone remember the package search and filter for each signed-in account and household on the current device. **Reset list** clears the query and returns to **On the way**. These preferences do not change package records or sync between devices; signing into another account or switching households restores only that account and household’s preferences.
+
 ## What is implemented
 
 - Responsive package timeline, search, status filters, manual entry/editing, tracking history, source-email inspection, and duplicate merging.
