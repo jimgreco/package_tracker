@@ -22,6 +22,20 @@ import XCTest
       app.swipeUp()
     }
   }
+  func testNoEstimateFilterPersistsAndResets() {
+    launch(["--persist-list-preferences", "--reset-list-preferences"])
+    XCTAssertTrue(app.buttons["packageFilter"].waitForExistence(timeout: 5))
+    app.buttons["packageFilter"].tap()
+    app.buttons["No estimate (1)"].tap()
+    XCTAssertTrue(app.staticTexts["Active packages without a delivery estimate."].exists)
+    screenshot("no-estimate-filter")
+    app.terminate()
+    launch(["--persist-list-preferences"])
+    XCTAssertTrue(app.buttons["packageFilter"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["packageFilter"].label.hasPrefix("No estimate"))
+    app.buttons["resetPackageList"].tap()
+    XCTAssertTrue(app.buttons["packageFilter"].label.hasPrefix("On the way"))
+  }
   func testWalkthrough() {
     launch(["--walkthrough"])
     XCTAssertTrue(app.staticTexts["Welcome to PorchPong"].waitForExistence(timeout: 8))

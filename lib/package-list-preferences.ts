@@ -2,6 +2,7 @@ export const PACKAGE_FILTERS = [
   "On the way",
   "Delivered",
   "To collect",
+  "No estimate",
   "Dismissed",
   "All packages",
 ] as const;

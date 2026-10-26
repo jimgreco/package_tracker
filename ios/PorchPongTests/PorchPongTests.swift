@@ -3,6 +3,29 @@ import XCTest
 @testable import PorchPong
 
 final class ModelTests: XCTestCase {
+  func testNoEstimateRequiresActiveVisiblePackageAndComposesSearch() {
+    var shipment = Fixture.shipment(status: "in_transit")
+    XCTAssertFalse(PackageFilter.noEstimate.includes(shipment))
+    shipment.estimate = nil
+    for status in ["ordered", "pre_transit", "in_transit", "out_for_delivery", "delayed", "available_for_pickup", "failure"] {
+      shipment.status = status
+      XCTAssertTrue(PackageFilter.noEstimate.includes(shipment))
+    }
+    XCTAssertEqual(PackageFilter.noEstimate.results([shipment], search: "Cometeer").count, 1)
+    XCTAssertTrue(PackageFilter.noEstimate.results([shipment], search: "missing").isEmpty)
+    for status in ["delivered", "cancelled", "unknown"] {
+      shipment.status = status
+      XCTAssertFalse(PackageFilter.noEstimate.includes(shipment))
+    }
+    shipment.status = "in_transit"
+    shipment.snoozedAt = "2026-10-26T00:00:00Z"
+    XCTAssertFalse(PackageFilter.noEstimate.includes(shipment))
+    shipment.snoozedAt = nil; shipment.dismissedAt = "2026-10-26T00:00:00Z"
+    XCTAssertFalse(PackageFilter.noEstimate.includes(shipment))
+    shipment.dismissedAt = nil; shipment.archivedAt = "2026-10-26T00:00:00Z"
+    XCTAssertFalse(PackageFilter.noEstimate.includes(shipment))
+  }
+
   func testPackageSearchCombinesDetailsAndRequiresEveryWord() {
     var shipment = Fixture.shipment(merchant: "Schoolhouse")
     shipment.carrier = "FedEx"

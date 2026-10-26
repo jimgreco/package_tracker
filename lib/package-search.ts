@@ -22,3 +22,13 @@ export function matchesPackageSearch(
   // Each word can match a different detail, without depending on field order.
   return terms.every((term) => fields.some((value) => value.includes(term)));
 }
+
+export function hasNoDeliveryEstimate(
+  shipment: Pick<Shipment, "status" | "estimate" | "archivedAt" | "dismissedAt" | "snoozedAt">,
+) {
+  return !shipment.archivedAt && !shipment.dismissedAt && !shipment.snoozedAt
+    && !shipment.estimate && [
+      "ordered", "pre_transit", "in_transit", "out_for_delivery",
+      "delayed", "available_for_pickup", "failure",
+    ].includes(shipment.status);
+}

@@ -30,7 +30,7 @@ import type {
   Email,
 } from "@/lib/types";
 import { STATUS_LABEL } from "@/lib/types";
-import { matchesPackageSearch } from "@/lib/package-search";
+import { hasNoDeliveryEstimate, matchesPackageSearch } from "@/lib/package-search";
 import { DEFAULT_PACKAGE_LIST, PACKAGE_FILTERS, packageListKey } from "@/lib/package-list-preferences";
 import { usePackageListPreferences } from "./use-package-list-preferences";
 import {
@@ -306,9 +306,11 @@ export default function Page() {
         ? [...attention, ...active.filter((s) => !needsAttention(s))]
         : filter === "Delivered"
           ? delivered
-          : filter === "To collect"
-            ? all.filter(awaitingCollection)
-          : all
+          : filter === "No estimate"
+            ? all.filter(hasNoDeliveryEstimate)
+            : filter === "To collect"
+              ? all.filter(awaitingCollection)
+              : all
   ).filter(matchesSearch);
   const visibleAttentionCount =
     filter === "On the way" ? visible.filter(needsAttention).length : 0;
@@ -512,7 +514,7 @@ export default function Page() {
                         <span>{visible.length} packages</span>
                       </div>
                       <p className="sort-explanation">
-                        {filter === "To collect" ? "Delivered packages not yet marked collected." : "Newest first by initial email date, or date added manually."}
+                        {filter === "No estimate" ? "Active packages without a delivery estimate." : filter === "To collect" ? "Delivered packages not yet marked collected." : "Newest first by initial email date, or date added manually."}
                       </p>
                       <div className="search-box">
                         <Search size={17} />

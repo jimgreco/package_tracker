@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { matchesPackageSearch } from "../lib/package-search";
+import { hasNoDeliveryEstimate, matchesPackageSearch } from "../lib/package-search";
 
 const shipment = {
   merchant: "Schoolhouse",
@@ -65,4 +65,15 @@ test("search uses package details without matching private links or unrelated me
   ]) {
     assert.equal(matchesPackageSearch(withMetadata, search), false);
   }
+});
+
+
+test("No estimate follows active visible shipments and responds to an estimate arriving", () => {
+  const base = { status: "in_transit", estimate: null, archivedAt: null, dismissedAt: null, snoozedAt: null } as const;
+  for (const status of ["ordered", "pre_transit", "in_transit", "out_for_delivery", "delayed", "available_for_pickup", "failure"] as const) {
+    assert.equal(hasNoDeliveryEstimate({ ...base, status }), true);
+  }
+  for (const status of ["delivered", "cancelled", "unknown"] as const) assert.equal(hasNoDeliveryEstimate({ ...base, status }), false);
+  for (const field of ["archivedAt", "dismissedAt", "snoozedAt"]) assert.equal(hasNoDeliveryEstimate({ ...base, [field]: "2026-10-26T00:00:00Z" }), false);
+  assert.equal(hasNoDeliveryEstimate({ ...base, estimate: { kind: "date", start: "2026-10-28", end: "2026-10-28", timeZone: "America/New_York", label: null } }), false);
 });

@@ -81,6 +81,7 @@ enum PackageFilter: String, CaseIterable, Identifiable, Sendable {
   case onTheWay = "On the way"
   case delivered = "Delivered"
   case toCollect = "To collect"
+  case noEstimate = "No estimate"
   case dismissed = "Dismissed"
   case all = "All packages"
   var id: String { rawValue }
@@ -105,6 +106,7 @@ enum PackageFilter: String, CaseIterable, Identifiable, Sendable {
       return Self.needsAttention(s) || Self.isActive(s)
     case .delivered: return s.status == "delivered"
     case .toCollect: return s.status == "delivered" && s.collectedAt == nil
+    case .noEstimate: return Self.isActive(s) && s.estimate == nil
     case .dismissed: return false
     }
   }
