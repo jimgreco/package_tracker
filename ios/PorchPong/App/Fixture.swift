@@ -128,7 +128,9 @@
       let todaySections = args.contains("--today-sections")
       let api = FixtureAPI(
         offline: args.contains("--offline"), malformed: args.contains("--malformed"),
-        todaySections: todaySections)
+        todaySections: todaySections,
+        collectionFailureFirst: args.contains("--collection-failure-first"),
+        slowCollection: args.contains("--slow-collection"))
       let cache = PackageCache(
         directory: FileManager.default.temporaryDirectory.appendingPathComponent("PorchPongFixture"))
       let dashboard = dashboard(todaySections: todaySections)
@@ -155,11 +157,18 @@
     var value: Dashboard
     var offline: Bool
     var malformed: Bool
+    var collectionFailureFirst: Bool
+    var slowCollection: Bool
     var keys: [String: String] = [:]
     var writes = 0
-    init(offline: Bool = false, malformed: Bool = false, todaySections: Bool = false) {
+    init(
+      offline: Bool = false, malformed: Bool = false, todaySections: Bool = false,
+      collectionFailureFirst: Bool = false, slowCollection: Bool = false
+    ) {
       self.offline = offline
       self.malformed = malformed
+      self.collectionFailureFirst = collectionFailureFirst
+      self.slowCollection = slowCollection
       value = Fixture.dashboard(todaySections: todaySections)
     }
     func configure(_ session: NativeSession?) {}
@@ -189,6 +198,13 @@
           return try JSONEncoder().encode(Fixture.detail(s))
         }
         if parts.count == 3, let index = value.shipments.firstIndex(where: { $0.id == parts[1] }) {
+          if ["collect", "uncollect"].contains(parts[2]) {
+            if slowCollection { try await Task.sleep(for: .seconds(2)) }
+            if collectionFailureFirst {
+              collectionFailureFirst = false
+              throw APIError(status: 500, message: "Synthetic collection failure. Please try again.")
+            }
+          }
           if parts[2] == "note", method == "PATCH", let body {
             let payload = try JSONDecoder().decode(FixtureNote.self, from: body)
             value.shipments[index].note = payload.note

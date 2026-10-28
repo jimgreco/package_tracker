@@ -41,6 +41,13 @@ async page => {
   };
   let household = "synthetic-household";
   const writes = [];
+  const households = new Map();
+  const packagesFor = id => {
+    if (!households.has(id)) households.set(id, structuredClone(fixture.shipments));
+    return households.get(id);
+  };
+  page.__collectionQueue = [];
+  page.__packageFixtures = households;
   const auth = { expired: false };
   page.__preferenceAuth = auth;
   page.__dashboardQueue = [];
@@ -67,7 +74,7 @@ async page => {
       const params = new URL(page.url()).searchParams;
       const account = params.get("fixture-account") || "sample@example.test";
       const email = params.get("fixture-email") || account;
-      const payload = { ...fixture, settings: { ...fixture.settings,
+      const payload = { ...fixture, shipments: structuredClone(packagesFor(household)), settings: { ...fixture.settings,
         householdId: household, householdName: household === "synthetic-household" ? "Home" : "Other home", account: {id: account === "sample@example.test" ? "synthetic-user" : "other-user", email} } };
       const delayed = page.__dashboardQueue.shift();
       if (delayed) {
@@ -90,6 +97,35 @@ async page => {
       writes.push(url.pathname);
       household = route.request().postDataJSON().householdId;
       return route.fulfill({json: {ok: true}});
+    }
+    const packagePath = url.pathname.match(/^\/api\/shipments\/([^/]+)(?:\/(collect|uncollect))?$/);
+    if (packagePath) {
+      const target = packagesFor(household).find(s => s.id === packagePath[1]);
+      if (!target) return route.fulfill({status:404, json:{error:"Package not found."}});
+      if (!packagePath[2] && route.request().method() === "GET") {
+        return route.fulfill({json:{shipment:target, events:[], emails:[]}});
+      }
+      if (packagePath[2] && route.request().method() === "POST") {
+        writes.push(url.pathname);
+        const respond = status => {
+          if (status !== 200) return route.fulfill({status, json:{error:"Synthetic collection failure. Please try again."}});
+          if (target.status !== "delivered" || target.dismissedAt) {
+            return route.fulfill({status:400, json:{error:"Only delivered, visible packages can be marked collected."}});
+          }
+          target.collectedAt = packagePath[2] === "collect" ? stamp : null;
+          target.collectedByName = target.collectedAt ? "Sample member" : null;
+          target.updatedAt = new Date().toISOString();
+          return route.fulfill({json:{ok:true}});
+        };
+        const delayed = page.__collectionQueue.shift();
+        if (delayed) {
+          delayed.started = true;
+          return new Promise((resolve, reject) => {
+            delayed.release = (status = 200) => respond(status).then(resolve, reject);
+          });
+        }
+        return respond(200);
+      }
     }
     if (url.pathname.startsWith("/api/")) {
       return route.fulfill({ status: 404, json: { error: "No live API in synthetic preview" } });

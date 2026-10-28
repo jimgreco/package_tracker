@@ -158,7 +158,15 @@ struct PackagesView: View {
           .fixedSize(horizontal: false, vertical: true)
           .padding(.bottom, 8)
       }
-      PackageHomeNote(id: shipment.id, merchant: shipment.merchant, note: shipment.note)
+      preferencesLayout {
+        PackageHomeNote(id: shipment.id, merchant: shipment.merchant, note: shipment.note)
+        if shipment.status == "delivered" && shipment.dismissedAt == nil
+          && shipment.snoozedAt == nil && shipment.archivedAt == nil
+        {
+          if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
+          PackageHomeCollection(shipment: shipment)
+        }
+      }
     }
     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
       if shipment.snoozedAt != nil {
@@ -176,10 +184,10 @@ struct PackagesView: View {
       }
     }
     .swipeActions(edge: .leading, allowsFullSwipe: false) {
-      if shipment.status == "delivered" && shipment.dismissedAt == nil
-        && shipment.collectedAt == nil
-      {
-        Button("Collect") { Task { await store.action(shipment, "collect") } }.tint(.green)
+      if shipment.status == "delivered" && shipment.dismissedAt == nil {
+        Button(shipment.collectedAt == nil ? "Collect" : "Undo collection") {
+          Task { await store.action(shipment, shipment.collectedAt == nil ? "collect" : "uncollect") }
+        }.tint(.green)
           .disabled(!store.canWrite)
       }
       if shipment.canDeliver {
@@ -230,6 +238,56 @@ struct PackageRow: View {
         }
       }
     }.padding(.vertical, 8).accessibilityElement(children: .combine)
+  }
+}
+
+private struct PackageHomeCollection: View {
+  @Environment(AppStore.self) private var store
+  let shipment: Shipment
+  @State private var saving = false
+  @State private var error: String?
+  private var label: String { shipment.collectedAt == nil ? "Mark collected" : "Undo collection" }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 4) {
+      Button {
+        guard !saving, store.canWrite else { return }
+        saving = true
+        error = nil
+        Task { await save() }
+      } label: {
+        HStack(spacing: 5) {
+          if saving { ProgressView().controlSize(.small) }
+          Text(saving ? "Saving…" : label)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(.caption)
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(.borderless)
+      .disabled(saving || !store.canWrite)
+      .accessibilityLabel("\(saving ? "Saving collection" : label) for \(shipment.merchant)")
+      .accessibilityIdentifier("collectionButton-\(shipment.id)")
+      if let error {
+        Text(error).font(.caption).foregroundStyle(.red)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+    }
+  }
+
+  private func save() async {
+    let captured = store.epoch
+    let collecting = shipment.collectedAt == nil
+    defer { saving = false }
+    do {
+      try await store.mutate("shipments/\(shipment.id)/\(collecting ? "collect" : "uncollect")")
+      guard store.epoch == captured else { return }
+      store.message = collecting ? "Package marked collected." : "Collection undone."
+    } catch {
+      guard store.epoch == captured else { return }
+      self.error = store.friendly(error)
+    }
   }
 }
 

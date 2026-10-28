@@ -30,6 +30,20 @@ playwright-cli --session porchprefs run-code --filename=tests/browser/package-li
 playwright-cli --session porchprefs close
 ```
 
+For collection actions, use a fresh session and the same synthetic fixture:
+
+```sh
+playwright-cli --session porchcollect open about:blank --headed
+playwright-cli --session porchcollect run-code --filename=tests/browser/package-list-fixture.js
+playwright-cli --session porchcollect run-code --filename=tests/browser/package-collection-checks.js
+playwright-cli --session porchcollect close
+```
+
+The collection gate covers card collect/undo, delivery evidence, collector
+attribution, delayed responses, failure/retry, To collect removal, unchanged
+search/filter, detail navigation and mobile layout. Each household has an
+independent synthetic package list. Screenshots use the `collection-` prefix.
+
 Both check scripts must return `passed: true`. Stop the preview server with
 Ctrl-C after inspection. Screenshots are saved under ignored `output/playwright/`.
 The fixture intentionally blocks remote fonts and returns 404 for unrelated

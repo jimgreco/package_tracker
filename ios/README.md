@@ -12,6 +12,9 @@ The package list remembers its search and filter on this iPhone for each account
 and household. Reset list clears that selection. Preferences survive relaunch and
 sign-out, but another account or household cannot see them. They stay in protected,
 backup-excluded files; unavailable storage leaves searching usable in memory.
+Delivered package cards offer Mark collected and Undo collection directly in the
+list. Collection updates the To collect filter while preserving the current
+search; offline cards remain read-only.
 
 ## Project and configuration
 
@@ -72,6 +75,8 @@ inbox, settings, large text, and offline/malformed-response recovery.
 
 For synthetic visual inspection only, launch a Debug build with `--fixture`.
 Optional flags: `--offline`, `--malformed`, `--signed-out`, `--today-sections`.
+Collection checks can add `--collection-failure-first` and `--slow-collection`
+to inspect a failed first save and the pending state without any server writes.
 Tests also use
 `-UIPreferredContentSizeCategoryName UICTContentSizeCategoryAccessibilityXXXL`.
 These fixtures cannot be activated in Release. Screenshots and result bundles

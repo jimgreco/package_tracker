@@ -698,6 +698,31 @@ export default function Page() {
                                       </button>
                                     ) : (
                                       <>
+                                        {s.status === "delivered" && (
+                                          <button
+                                            className="subtle-button collection-button"
+                                            disabled={busy === `package:${s.id}`}
+                                            aria-busy={busy === `package:${s.id}`}
+                                            aria-label={`${s.collectedAt ? "Undo collection" : "Mark collected"} for ${s.merchant}`}
+                                            onClick={() =>
+                                              quickAction(
+                                                s,
+                                                s.collectedAt ? "uncollect" : "collect",
+                                              )
+                                            }
+                                          >
+                                            {busy === `package:${s.id}` ? (
+                                              <Spinner />
+                                            ) : (
+                                              <CheckCircle2 size={14} />
+                                            )}
+                                            {busy === `package:${s.id}`
+                                              ? "Saving…"
+                                              : s.collectedAt
+                                                ? "Undo collection"
+                                                : "Mark collected"}
+                                          </button>
+                                        )}
                                         {![
                                           "delivered",
                                           "cancelled",

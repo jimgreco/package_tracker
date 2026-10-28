@@ -2792,6 +2792,9 @@ footer {
   gap: 4px;
   font-size: 12px;
 }
+.package-quick-actions .collection-button {
+  min-height: 44px;
+}
 @media (max-width: 600px) {
   .package-quick-actions {
     padding: 7px 12px;
