@@ -82,11 +82,13 @@ jobs:
       - name: Resolve build number through Connect API
         run: |
           COMMIT_COUNT="$(git rev-list HEAD --count)" node .github/scripts/testflight.mjs number
-      - name: Create App Store profile through Connect API
+      - name: Verify existing Jim-only internal audience
+        run: node .github/scripts/testflight.mjs audience
+      - name: Read the existing App Store profile through Connect API
         run: |
           node .github/scripts/ensure-app-store-profile.mjs \
             --bundle-id "$IOS_BUNDLE_ID" \
-            --profile-name "PorchPong App Store ${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --profile-name "PorchPong App Store 39824194094-1" \
             --certificate-der "$RUNNER_TEMP/doorstep-cert.der" \
             --output "$RUNNER_TEMP/doorstep.mobileprovision"
           python3 .github/scripts/install-profile.py
@@ -121,6 +123,7 @@ jobs:
       - name: Upload to TestFlight with Connect API credentials
         if: inputs.upload_build
         run: |
+          node .github/scripts/testflight.mjs audience
           IPA_PATH="$RUNNER_TEMP/export/PorchPong.ipa"
           test -f "$IPA_PATH"
           xcrun altool --upload-app --type ios --file "$IPA_PATH" \

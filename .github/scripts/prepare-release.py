@@ -24,7 +24,8 @@ if sys.argv[1] == 'project':
     options = {'method': 'app-store-connect', 'destination': 'export', 'teamID': TEAM,
                'signingStyle': 'manual', 'signingCertificate': 'Apple Distribution',
                'provisioningProfiles': {BUNDLE: os.environ['IOS_PROFILE_NAME']},
-               'manageAppVersionAndBuildNumber': False, 'stripSwiftSymbols': True, 'uploadSymbols': True}
+               'manageAppVersionAndBuildNumber': False, 'testFlightInternalTestingOnly': True,
+               'stripSwiftSymbols': True, 'uploadSymbols': True}
     with (Path(os.environ['RUNNER_TEMP']) / 'ExportOptions.plist').open('wb') as output:
         plistlib.dump(options, output)
 elif sys.argv[1] == 'archive':

@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { generateKeyPairSync, verify } from 'node:crypto';
+import { generateKeyPairSync, verify, createHash } from 'node:crypto';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createAPI, makeToken } from '../asc-api.mjs';
 import { ensureProfile } from '../ensure-app-store-profile.mjs';
-import { nextBuildNumber, waitForBuild, checkLatestBuild, findPorchPongApp, renameApp } from '../testflight.mjs';
+import { nextBuildNumber, waitForBuild, checkLatestBuild, findPorchPongApp, renameApp, verifyAudience } from '../testflight.mjs';
 
 test('verification-only Apple check reads existing state without attributing an upload', async () => {
   const api = {
@@ -97,16 +97,10 @@ function profileAPI({ existing = false, wrongCertificate = false, wrongBundle = 
 }
 const profileOptions = { bundleId: 'com.jimgreco.doorstep', profileName: 'PorchPong CI', certificate: Buffer.from('synthetic-cert') };
 
-test('profile creation binds only the exact registered bundle and imported distribution certificate', async () => {
+test('missing profile stops without creating signing assets', async () => {
   const { api, calls } = profileAPI();
-  assert.equal((await ensureProfile(api, profileOptions)).toString(), 'synthetic-profile');
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].path, 'profiles');
-  assert.equal(calls[0].body.data.attributes.profileType, 'IOS_APP_STORE');
-  assert.deepEqual(calls[0].body.data.relationships, {
-    bundleId: { data: { type: 'bundleIds', id: 'bundle' } },
-    certificates: { data: [{ type: 'certificates', id: 'cert' }] },
-  });
+  await assert.rejects(ensureProfile(api, profileOptions), /no profile will be created/);
+  assert.equal(calls.length, 0);
 });
 
 test('matching profile is reused without mutating external resources', async () => {
@@ -123,17 +117,52 @@ test('wrong bundle, wrong certificate and expired certificate fail before profil
   }
 });
 
+const testerHash = createHash('sha256').update('jim@example.invalid').digest('hex');
+function audienceFixture() {
+  const tester = { type: 'betaTesters', id: 'jim', attributes: { email: ' Jim@Example.Invalid ', inviteType: 'EMAIL' } };
+  const routes = {
+    'apps/6813927476/betaGroups?limit=200': [{ type: 'betaGroups', id: 'owner', attributes: {
+      name: 'Owner', isInternalGroup: true, hasAccessToAllBuilds: true, publicLinkEnabled: false,
+    } }],
+    'betaGroups/owner/betaTesters?limit=200': [structuredClone(tester)],
+    'betaTesters?filter[apps]=6813927476&limit=200': [structuredClone(tester)],
+    'betaGroups/owner/builds?limit=200': [{ id: 'new' }],
+    'builds/new/individualTesters?limit=200': [],
+  };
+  const all = async path => { assert.ok(routes[path], `Unexpected path: ${path}`); return routes[path]; };
+  return { routes, all };
+}
+test('exact existing Owner audience passes and all broadened or changed scopes fail', async () => {
+  const good = audienceFixture();
+  assert.equal((await verifyAudience(good, '6813927476', testerHash)).groupId, 'owner');
+  for (const change of ['app', 'extra-group', 'external', 'public', 'missing-public', 'automatic', 'extra-tester', 'replacement', 'app-extra', 'app-identity']) {
+    const f = audienceFixture(), group = f.routes['apps/6813927476/betaGroups?limit=200'][0];
+    if (change === 'extra-group') f.routes['apps/6813927476/betaGroups?limit=200'].push(structuredClone(group));
+    if (change === 'external') group.attributes.isInternalGroup = false;
+    if (change === 'public') group.attributes.publicLinkEnabled = true;
+    if (change === 'missing-public') delete group.attributes.publicLinkEnabled;
+    if (change === 'automatic') group.attributes.hasAccessToAllBuilds = false;
+    if (change === 'extra-tester') f.routes['betaGroups/owner/betaTesters?limit=200'].push({ id: 'other' });
+    if (change === 'replacement') f.routes['betaGroups/owner/betaTesters?limit=200'][0].attributes.email = 'other@example.invalid';
+    if (change === 'app-extra') f.routes['betaTesters?filter[apps]=6813927476&limit=200'].push({ id: 'other' });
+    if (change === 'app-identity') f.routes['betaTesters?filter[apps]=6813927476&limit=200'][0].id = 'different';
+    await assert.rejects(verifyAudience(f, change === 'app' ? 'other-app' : '6813927476', testerHash), change);
+  }
+});
+
 test('upload verification waits for exact build, processing and internal testing readiness', async () => {
   let clock = 0, count = 0;
+  const audience = audienceFixture();
   const api = {
-    all: async () => {
+    all: async path => {
+      if (!path.startsWith('builds?')) return audience.all(path);
       count++;
       if (count === 1) return [{ id: 'old', attributes: { version: '2', processingState: 'VALID' } }];
-      return [{ id: 'new', attributes: { version: '3', processingState: count === 2 ? 'PROCESSING' : 'VALID' } }];
+      return [{ id: 'new', attributes: { version: '3', processingState: count === 2 ? 'PROCESSING' : 'VALID', buildAudienceType: 'INTERNAL_ONLY' } }];
     },
     request: async () => ({ data: { attributes: { internalBuildState: count === 3 ? 'READY_FOR_BETA_TESTING' : 'IN_BETA_TESTING' } } }),
   };
-  const result = await waitForBuild(api, 'app', '3', { now: () => clock, sleep: async ms => { clock += ms; } });
+  const result = await waitForBuild(api, '6813927476', '3', { now: () => clock, sleep: async ms => { clock += ms; }, testerHash });
   assert.equal(result.build_id, 'new');
   assert.equal(result.internal_testing_state, 'IN_BETA_TESTING');
   assert.equal(count, 4);
@@ -194,11 +223,30 @@ test('app rename updates only the exact English localization and is idempotent',
   assert.equal(calls.length, 1);
 });
 
-test('adding push capability generates a new profile instead of reusing one without entitlements', async () => {
+test('missing push capability stops without changing Apple configuration', async () => {
   const { api, calls } = profileAPI({ existing: true });
   const original = api.all;
   api.all = path => path.endsWith('/bundleIdCapabilities') ? Promise.resolve([]) : original(path);
-  await ensureProfile(api, profileOptions);
-  assert.deepEqual(calls.map(c => c.path), ['bundleIdCapabilities', 'profiles']);
-  assert.equal(calls[0].body.data.attributes.capabilityType, 'PUSH_NOTIFICATIONS');
+  await assert.rejects(ensureProfile(api, profileOptions), /no Apple configuration/);
+  assert.equal(calls.length, 0);
+});
+
+
+test('post-upload verification rejects broadened builds and waits for the approved group', async () => {
+  for (const change of ['public-build', 'extra-individual', 'other-individual', 'missing-group']) {
+    const f = audienceFixture();
+    let clock = 0;
+    if (change === 'extra-individual') f.routes['builds/new/individualTesters?limit=200'] = [{ id: 'jim' }, { id: 'other' }];
+    if (change === 'other-individual') f.routes['builds/new/individualTesters?limit=200'] = [{ id: 'other' }];
+    if (change === 'missing-group') f.routes['betaGroups/owner/builds?limit=200'] = [];
+    const api = {
+      all: path => path.startsWith('builds?') ? Promise.resolve([{ id: 'new', attributes: {
+        version: '3', processingState: 'VALID', buildAudienceType: change === 'public-build' ? 'APP_STORE_ELIGIBLE' : 'INTERNAL_ONLY',
+      } }]) : f.all(path),
+      request: async () => ({ data: { attributes: { internalBuildState: 'IN_BETA_TESTING' } } }),
+    };
+    await assert.rejects(waitForBuild(api, '6813927476', '3', {
+      testerHash, now: () => clock, sleep: async ms => { clock += ms; }, timeout: 60000,
+    }), change === 'missing-group' ? /Upload may have succeeded/ : change === 'public-build' ? /internal-only/ : /unapproved individual/);
+  }
 });

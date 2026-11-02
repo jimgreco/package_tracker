@@ -1,7 +1,32 @@
 #!/usr/bin/env node
 import { appendFileSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { createAPI } from './asc-api.mjs';
+
+const approvedTesterHash = 'a46343858cf3e5e2fda6339f7063190f295ece10dea50979932e69ec57ea4baa';
+export async function verifyAudience(api, appId, testerHash = approvedTesterHash) {
+  if (appId !== '6813927476') throw new Error('Unexpected PorchPong App Store app.');
+  const approved = tester => tester?.type === 'betaTesters'
+    && typeof tester.attributes?.email === 'string'
+    && createHash('sha256').update(tester.attributes.email.trim().toLowerCase()).digest('hex') === testerHash
+    && tester.attributes.inviteType !== 'PUBLIC_LINK';
+  const groups = await api.all(`apps/${appId}/betaGroups?limit=200`);
+  if (groups.length !== 1) throw new Error('Exactly the existing Owner group is required; no groups will be changed.');
+  const group = groups[0], a = group.attributes;
+  if (group.type !== 'betaGroups' || !group.id || a?.name !== 'Owner' || a.isInternalGroup !== true
+    || a.hasAccessToAllBuilds !== true || !Object.hasOwn(a, 'publicLinkEnabled')
+    || ![false, null].includes(a.publicLinkEnabled) || a.publicLink || a.publicLinkId) {
+    throw new Error('Existing Owner group must remain internal, automatic and non-public.');
+  }
+  const testers = await api.all(`betaGroups/${encodeURIComponent(group.id)}/betaTesters?limit=200`);
+  const all = await api.all(`betaTesters?filter[apps]=${appId}&limit=200`);
+  if (testers.length !== 1 || all.length !== 1 || !testers[0].id || testers[0].id !== all[0].id
+    || !approved(testers[0]) || !approved(all[0])) {
+    throw new Error('PorchPong audience must be exactly Jim in Owner; no testers will be changed.');
+  }
+  return { groupId: group.id, testerId: testers[0].id };
+}
 
 export function nextBuildNumber(commitCount, builds) {
   if (!/^[1-9]\d*$/.test(String(commitCount))) throw new Error('Invalid git commit count.');
@@ -27,7 +52,7 @@ export async function checkLatestBuild(api, appId) {
 }
 
 export async function waitForBuild(api, appId, number, {
-  now = Date.now, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), timeout = 20 * 60 * 1000,
+  now = Date.now, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), timeout = 20 * 60 * 1000, testerHash = approvedTesterHash,
 } = {}) {
   const deadline = now() + timeout;
   while (now() < deadline) {
@@ -41,8 +66,19 @@ export async function waitForBuild(api, appId, number, {
         const detail = await api.request('GET', `builds/${encodeURIComponent(build.id)}/buildBetaDetail`);
         const internalState = detail.data?.attributes?.internalBuildState;
         if (internalState === 'IN_BETA_TESTING') {
+          if (build.attributes.buildAudienceType !== 'INTERNAL_ONLY') throw new Error('Expected an internal-only build.');
+          const audience = await verifyAudience(api, appId, testerHash);
+          const groupBuilds = await api.all(`betaGroups/${encodeURIComponent(audience.groupId)}/builds?limit=200`);
+          const individuals = await api.all(`builds/${encodeURIComponent(build.id)}/individualTesters?limit=200`);
+          if (individuals.length > 1 || individuals.some(t => t.id !== audience.testerId)) {
+            throw new Error('Build has an unapproved individual tester.');
+          }
+          if (!groupBuilds.some(b => b.id === build.id)) {
+            await sleep(30000);
+            continue;
+          }
           return { app_id: appId, build_number: number, build_id: build.id,
-            processing_state: state, internal_testing_state: internalState };
+            processing_state: state, internal_testing_state: internalState, approved_group_attached: true };
         }
         if (['MISSING_EXPORT_COMPLIANCE', 'PROCESSING_EXCEPTION', 'EXPIRED'].includes(internalState)) {
           throw new Error(`Build needs attention in App Store Connect: ${internalState}.`);
@@ -93,6 +129,9 @@ async function main() {
     const number = nextBuildNumber(process.env.COMMIT_COUNT, builds);
     appendFileSync(process.env.GITHUB_ENV, `IOS_BUILD_NUMBER=${number}\n`);
     console.log(`PorchPong build number: ${number}`);
+  } else if (process.argv[2] === 'audience') {
+    await verifyAudience(api, appId);
+    console.log('Existing Owner group verified: exactly Jim, internal-only, no public links.');
   } else if (process.argv[2] === 'rename') {
     const result = await renameApp(api, process.env.IOS_BUNDLE_ID, process.argv[3], process.argv[4]);
     console.log(`${result.name} is registered for ${result.locale}.`);

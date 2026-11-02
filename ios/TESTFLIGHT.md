@@ -83,9 +83,16 @@ normal local development keeps automatic signing. Generated build products live
 outside Documents so the file provider cannot attach metadata that breaks signing.
 
 Signing validates the exact registered bundle, team, expiration, distribution
-permissions and matching certificate. Temporary assets live under `RUNNER_TEMP`;
+permissions and matching certificate. The existing `PorchPong App Store 39824194094-1`
+profile and existing push capability must already be valid; the release does not
+create profiles or enable capabilities. The exact Owner group and Jim's identity
+are checked before signing, immediately before upload, and after processing.
+Exports are internal-only. No tester or group membership is modified.
+Temporary assets live under `RUNNER_TEMP`;
 cleanup restores the keychain search list and removes this job's keychain, API key,
-P12 and installed profile. The Release archive check verifies the production
+P12 and newly installed profile. An identical profile already cached on the Mac is
+preserved; a conflicting cached profile stops the release without overwriting it.
+The Release archive check verifies the production
 origin, callback, iOS version, signature, and absence of fixtures/ATS exceptions.
 
 Evidence, IPA and archive are retained locally in

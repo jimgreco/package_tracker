@@ -21,6 +21,8 @@ for name in ('APP_STORE_CONNECT_API_KEY_PATH', 'IOS_PROFILE_PATH'):
     allowed = temp if name == 'APP_STORE_CONNECT_API_KEY_PATH' else Path.home() / 'Library/MobileDevice/Provisioning Profiles'
     if not path.is_relative_to(allowed):
         raise RuntimeError('Refusing to remove a signing asset outside its job location.')
+    if name == 'IOS_PROFILE_PATH' and os.environ.get('IOS_PROFILE_CREATED') != 'true':
+        continue
     path.unlink(missing_ok=True)
 for name in ('doorstep-distribution.p12', 'doorstep-cert.pem', 'doorstep-cert.der',
              'doorstep.mobileprovision'):

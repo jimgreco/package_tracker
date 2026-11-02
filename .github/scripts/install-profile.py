@@ -3,7 +3,6 @@ from datetime import datetime, timezone
 import os
 from pathlib import Path
 import plistlib
-import shutil
 import subprocess
 
 profile = Path(os.environ['RUNNER_TEMP']) / 'doorstep.mobileprovision'
@@ -18,7 +17,16 @@ assert (Path(os.environ['RUNNER_TEMP']) / 'doorstep-cert.der').read_bytes() in d
 directory = Path.home() / 'Library/MobileDevice/Provisioning Profiles'
 directory.mkdir(parents=True, exist_ok=True)
 destination = directory / f"{data['UUID']}.mobileprovision"
+content = profile.read_bytes()
+try:
+    with destination.open('xb') as installed:
+        installed.write(content)
+    created = True
+except FileExistsError:
+    if destination.is_symlink() or destination.read_bytes() != content:
+        raise RuntimeError('Existing cached profile differs; it will not be overwritten.')
+    created = False
 with open(os.environ['GITHUB_ENV'], 'a') as output:
     output.write(f"IOS_PROFILE_NAME={data['Name']}\nIOS_PROFILE_PATH={destination}\n")
-shutil.copyfile(profile, destination)
+    output.write(f"IOS_PROFILE_CREATED={'true' if created else 'false'}\n")
 print('Validated PorchPong App Store profile and matching distribution certificate.')

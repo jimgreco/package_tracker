@@ -19,27 +19,18 @@ export async function ensureProfile(api, { bundleId, profileName, certificate, n
     && hash(Buffer.from(c.attributes.certificateContent, 'base64')) === hash(certificate));
   if (!cert) throw new Error('IOS_DIST_CERT_P12 does not match an active, unexpired distribution certificate.');
   const capabilities = await api.all(`bundleIds/${bundle.id}/bundleIdCapabilities`);
-  const addedPush = !capabilities.some(c => c.attributes?.capabilityType === 'PUSH_NOTIFICATIONS');
-  if (addedPush) {
-    await api.request('POST', 'bundleIdCapabilities', { data: {
-      type: 'bundleIdCapabilities', attributes: { capabilityType: 'PUSH_NOTIFICATIONS' },
-      relationships: { bundleId: { data: { type: 'bundleIds', id: bundle.id } } }
-    }});
+  if (!capabilities.some(c => c.attributes?.capabilityType === 'PUSH_NOTIFICATIONS')) {
+    throw new Error('Existing push capability is required; no Apple configuration will be changed.');
   }
   const profiles = await api.all(`profiles?filter[name]=${encodeURIComponent(profileName)}&filter[profileType]=IOS_APP_STORE&filter[profileState]=ACTIVE&include=bundleId,certificates&limit=200`);
-  let profile = !addedPush && profiles.find(p => p.attributes?.profileState === 'ACTIVE'
+  const matches = profiles.filter(p => p.attributes?.profileState === 'ACTIVE'
     && p.attributes.name === profileName && p.attributes.profileType === 'IOS_APP_STORE'
     && Date.parse(p.attributes.expirationDate) > now
     && p.relationships?.bundleId?.data?.id === bundle.id
-    && p.relationships?.certificates?.data?.some(c => c.id === cert.id));
-  if (!profile) {
-    const response = await api.request('POST', 'profiles', { data: {
-      type: 'profiles', attributes: { name: profileName, profileType: 'IOS_APP_STORE' },
-      relationships: { bundleId: { data: { type: 'bundleIds', id: bundle.id } },
-        certificates: { data: [{ type: 'certificates', id: cert.id }] } },
-    } });
-    profile = response.data;
-  }
+    && p.relationships?.certificates?.data?.length === 1
+    && p.relationships.certificates.data[0].id === cert.id);
+  if (matches.length !== 1) throw new Error('Exactly one matching existing profile is required; no profile will be created.');
+  let profile = matches[0];
   if (!profile?.attributes?.profileContent) {
     if (!profile?.id) throw new Error('App Store Connect did not return a profile.');
     profile = (await api.request('GET', `profiles/${encodeURIComponent(profile.id)}`)).data;
