@@ -82,7 +82,7 @@ jobs:
       - name: Resolve build number through Connect API
         run: |
           COMMIT_COUNT="$(git rev-list HEAD --count)" node .github/scripts/testflight.mjs number
-      - name: Verify existing Jim-only internal audience
+      - name: Verify existing Jim and Rachel internal audience
         run: node .github/scripts/testflight.mjs audience
       - name: Read the existing App Store profile through Connect API
         run: |

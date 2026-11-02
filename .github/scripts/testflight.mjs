@@ -4,13 +4,24 @@ import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { createAPI } from './asc-api.mjs';
 
-const approvedTesterHash = 'a46343858cf3e5e2fda6339f7063190f295ece10dea50979932e69ec57ea4baa';
-export async function verifyAudience(api, appId, testerHash = approvedTesterHash) {
+const approvedTesterHashes = [
+  'a46343858cf3e5e2fda6339f7063190f295ece10dea50979932e69ec57ea4baa',
+  '585d07537897adb6073389f204e47c7fb5bc1c743fa8ed3c387334912ca3006d',
+];
+const identityHash = tester => tester?.type === 'betaTesters'
+  && typeof tester.id === 'string' && tester.id.length > 0
+  && typeof tester.attributes?.email === 'string' && tester.attributes.inviteType !== 'PUBLIC_LINK'
+  ? createHash('sha256').update(tester.attributes.email.trim().toLowerCase()).digest('hex') : null;
+const distinctApprovedTesters = (testers, hashes) => testers.every(t => hashes.includes(identityHash(t)))
+  && new Set(testers.map(t => t.id)).size === testers.length
+  && new Set(testers.map(identityHash)).size === testers.length;
+
+export async function verifyAudience(api, appId, testerHashes = approvedTesterHashes) {
   if (appId !== '6813927476') throw new Error('Unexpected PorchPong App Store app.');
-  const approved = tester => tester?.type === 'betaTesters'
-    && typeof tester.attributes?.email === 'string'
-    && createHash('sha256').update(tester.attributes.email.trim().toLowerCase()).digest('hex') === testerHash
-    && tester.attributes.inviteType !== 'PUBLIC_LINK';
+  if (testerHashes.length !== 2 || new Set(testerHashes).size !== 2
+    || testerHashes.some(hash => !/^[a-f0-9]{64}$/.test(hash))) {
+    throw new Error('Exactly two distinct approved tester identities are required.');
+  }
   const groups = await api.all(`apps/${appId}/betaGroups?limit=200`);
   if (groups.length !== 1) throw new Error('Exactly the existing Owner group is required; no groups will be changed.');
   const group = groups[0], a = group.attributes;
@@ -21,11 +32,12 @@ export async function verifyAudience(api, appId, testerHash = approvedTesterHash
   }
   const testers = await api.all(`betaGroups/${encodeURIComponent(group.id)}/betaTesters?limit=200`);
   const all = await api.all(`betaTesters?filter[apps]=${appId}&limit=200`);
-  if (testers.length !== 1 || all.length !== 1 || !testers[0].id || testers[0].id !== all[0].id
-    || !approved(testers[0]) || !approved(all[0])) {
-    throw new Error('PorchPong audience must be exactly Jim in Owner; no testers will be changed.');
+  if (testers.length !== 2 || all.length !== 2 || !distinctApprovedTesters(testers, testerHashes)
+    || !distinctApprovedTesters(all, testerHashes)
+    || testers.some(t => !all.some(other => other.id === t.id && identityHash(other) === identityHash(t)))) {
+    throw new Error('PorchPong audience must be exactly Jim and Rachel in Owner; no testers will be changed.');
   }
-  return { groupId: group.id, testerId: testers[0].id };
+  return { groupId: group.id, testers: testers.map(t => ({ id: t.id, emailSha256: identityHash(t) })) };
 }
 
 export function nextBuildNumber(commitCount, builds) {
@@ -52,7 +64,7 @@ export async function checkLatestBuild(api, appId) {
 }
 
 export async function waitForBuild(api, appId, number, {
-  now = Date.now, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), timeout = 20 * 60 * 1000, testerHash = approvedTesterHash,
+  now = Date.now, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), timeout = 20 * 60 * 1000, testerHashes = approvedTesterHashes,
 } = {}) {
   const deadline = now() + timeout;
   while (now() < deadline) {
@@ -67,10 +79,11 @@ export async function waitForBuild(api, appId, number, {
         const internalState = detail.data?.attributes?.internalBuildState;
         if (internalState === 'IN_BETA_TESTING') {
           if (build.attributes.buildAudienceType !== 'INTERNAL_ONLY') throw new Error('Expected an internal-only build.');
-          const audience = await verifyAudience(api, appId, testerHash);
+          const audience = await verifyAudience(api, appId, testerHashes);
           const groupBuilds = await api.all(`betaGroups/${encodeURIComponent(audience.groupId)}/builds?limit=200`);
           const individuals = await api.all(`builds/${encodeURIComponent(build.id)}/individualTesters?limit=200`);
-          if (individuals.length > 1 || individuals.some(t => t.id !== audience.testerId)) {
+          if (individuals.length > 2 || !distinctApprovedTesters(individuals, testerHashes)
+            || individuals.some(t => !audience.testers.some(approved => approved.id === t.id && approved.emailSha256 === identityHash(t)))) {
             throw new Error('Build has an unapproved individual tester.');
           }
           if (!groupBuilds.some(b => b.id === build.id)) {
@@ -78,7 +91,7 @@ export async function waitForBuild(api, appId, number, {
             continue;
           }
           return { app_id: appId, build_number: number, build_id: build.id,
-            processing_state: state, internal_testing_state: internalState, approved_group_attached: true };
+            processing_state: state, internal_testing_state: internalState, approved_group_attached: true, internal_testers: 2, external_testers: 0 };
         }
         if (['MISSING_EXPORT_COMPLIANCE', 'PROCESSING_EXCEPTION', 'EXPIRED'].includes(internalState)) {
           throw new Error(`Build needs attention in App Store Connect: ${internalState}.`);
@@ -131,7 +144,7 @@ async function main() {
     console.log(`PorchPong build number: ${number}`);
   } else if (process.argv[2] === 'audience') {
     await verifyAudience(api, appId);
-    console.log('Existing Owner group verified: exactly Jim, internal-only, no public links.');
+    console.log('Existing Owner group verified: exactly Jim and Rachel, internal-only, no public links.');
   } else if (process.argv[2] === 'rename') {
     const result = await renameApp(api, process.env.IOS_BUNDLE_ID, process.argv[3], process.argv[4]);
     console.log(`${result.name} is registered for ${result.locale}.`);

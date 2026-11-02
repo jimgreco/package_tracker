@@ -45,7 +45,8 @@ at least the commit count and greater than every prior uploaded integer build.
   signing capabilities. Google login uses the server's existing web OAuth flow.
 - App Store Connect: [PorchPong Package Tracker, 6813927476](https://appstoreconnect.apple.com/apps/6813927476/testflight/ios).
   The explicit identifier and Owner internal group were created on Apple’s website;
-  automatic distribution is enabled. Add only the account owner as an internal tester.
+  automatic distribution is enabled. Its two existing testers are Jim and Rachel;
+  release guards pin exactly those identities without changing membership.
 - Standard system encryption is declared in `ITSAppUsesNonExemptEncryption=false`.
 - Repository: `jimgreco/package_tracker`; environment: `production`, restricted to
   branch `main`. Its six signing secret names match the sister projects:
@@ -85,7 +86,7 @@ outside Documents so the file provider cannot attach metadata that breaks signin
 Signing validates the exact registered bundle, team, expiration, distribution
 permissions and matching certificate. The existing `PorchPong App Store 39824194094-1`
 profile and existing push capability must already be valid; the release does not
-create profiles or enable capabilities. The exact Owner group and Jim's identity
+create profiles or enable capabilities. The exact Owner group and Jim and Rachel's identities
 are checked before signing, immediately before upload, and after processing.
 Exports are internal-only. No tester or group membership is modified.
 Temporary assets live under `RUNNER_TEMP`;

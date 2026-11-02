@@ -117,15 +117,16 @@ test('wrong bundle, wrong certificate and expired certificate fail before profil
   }
 });
 
-const testerHash = createHash('sha256').update('jim@example.invalid').digest('hex');
+const testerHashes = ['jim@example.invalid', 'rachel@example.invalid'].map(email => createHash('sha256').update(email).digest('hex'));
 function audienceFixture() {
   const tester = { type: 'betaTesters', id: 'jim', attributes: { email: ' Jim@Example.Invalid ', inviteType: 'EMAIL' } };
+  const rachel = { type: 'betaTesters', id: 'rachel', attributes: { email: 'rachel@example.invalid', inviteType: 'EMAIL' } };
   const routes = {
     'apps/6813927476/betaGroups?limit=200': [{ type: 'betaGroups', id: 'owner', attributes: {
       name: 'Owner', isInternalGroup: true, hasAccessToAllBuilds: true, publicLinkEnabled: false,
     } }],
-    'betaGroups/owner/betaTesters?limit=200': [structuredClone(tester)],
-    'betaTesters?filter[apps]=6813927476&limit=200': [structuredClone(tester)],
+    'betaGroups/owner/betaTesters?limit=200': [structuredClone(tester), structuredClone(rachel)],
+    'betaTesters?filter[apps]=6813927476&limit=200': [structuredClone(tester), structuredClone(rachel)],
     'betaGroups/owner/builds?limit=200': [{ id: 'new' }],
     'builds/new/individualTesters?limit=200': [],
   };
@@ -134,8 +135,8 @@ function audienceFixture() {
 }
 test('exact existing Owner audience passes and all broadened or changed scopes fail', async () => {
   const good = audienceFixture();
-  assert.equal((await verifyAudience(good, '6813927476', testerHash)).groupId, 'owner');
-  for (const change of ['app', 'extra-group', 'external', 'public', 'missing-public', 'automatic', 'extra-tester', 'replacement', 'app-extra', 'app-identity']) {
+  assert.equal((await verifyAudience(good, '6813927476', testerHashes)).groupId, 'owner');
+  for (const change of ['app', 'extra-group', 'external', 'public', 'missing-public', 'automatic', 'extra-tester', 'replacement', 'app-extra', 'app-identity', 'missing-tester', 'duplicate-id', 'duplicate-identity', 'app-swapped-identity', 'public-invite', 'wrong-resource']) {
     const f = audienceFixture(), group = f.routes['apps/6813927476/betaGroups?limit=200'][0];
     if (change === 'extra-group') f.routes['apps/6813927476/betaGroups?limit=200'].push(structuredClone(group));
     if (change === 'external') group.attributes.isInternalGroup = false;
@@ -146,7 +147,13 @@ test('exact existing Owner audience passes and all broadened or changed scopes f
     if (change === 'replacement') f.routes['betaGroups/owner/betaTesters?limit=200'][0].attributes.email = 'other@example.invalid';
     if (change === 'app-extra') f.routes['betaTesters?filter[apps]=6813927476&limit=200'].push({ id: 'other' });
     if (change === 'app-identity') f.routes['betaTesters?filter[apps]=6813927476&limit=200'][0].id = 'different';
-    await assert.rejects(verifyAudience(f, change === 'app' ? 'other-app' : '6813927476', testerHash), change);
+    if (change === 'missing-tester') f.routes['betaGroups/owner/betaTesters?limit=200'].pop();
+    if (change === 'duplicate-id') f.routes['betaGroups/owner/betaTesters?limit=200'][1].id = 'jim';
+    if (change === 'duplicate-identity') f.routes['betaGroups/owner/betaTesters?limit=200'][1].attributes.email = 'jim@example.invalid';
+    if (change === 'app-swapped-identity') f.routes['betaTesters?filter[apps]=6813927476&limit=200'].reverse().forEach((t, i) => { t.id = i ? 'rachel' : 'jim'; });
+    if (change === 'public-invite') f.routes['betaGroups/owner/betaTesters?limit=200'][1].attributes.inviteType = 'PUBLIC_LINK';
+    if (change === 'wrong-resource') f.routes['betaGroups/owner/betaTesters?limit=200'][1].type = 'users';
+    await assert.rejects(verifyAudience(f, change === 'app' ? 'other-app' : '6813927476', testerHashes), change);
   }
 });
 
@@ -162,7 +169,7 @@ test('upload verification waits for exact build, processing and internal testing
     },
     request: async () => ({ data: { attributes: { internalBuildState: count === 3 ? 'READY_FOR_BETA_TESTING' : 'IN_BETA_TESTING' } } }),
   };
-  const result = await waitForBuild(api, '6813927476', '3', { now: () => clock, sleep: async ms => { clock += ms; }, testerHash });
+  const result = await waitForBuild(api, '6813927476', '3', { now: () => clock, sleep: async ms => { clock += ms; }, testerHashes });
   assert.equal(result.build_id, 'new');
   assert.equal(result.internal_testing_state, 'IN_BETA_TESTING');
   assert.equal(count, 4);
@@ -246,7 +253,48 @@ test('post-upload verification rejects broadened builds and waits for the approv
       request: async () => ({ data: { attributes: { internalBuildState: 'IN_BETA_TESTING' } } }),
     };
     await assert.rejects(waitForBuild(api, '6813927476', '3', {
-      testerHash, now: () => clock, sleep: async ms => { clock += ms; }, timeout: 60000,
+      testerHashes, now: () => clock, sleep: async ms => { clock += ms; }, timeout: 60000,
     }), change === 'missing-group' ? /Upload may have succeeded/ : change === 'public-build' ? /internal-only/ : /unapproved individual/);
+  }
+});
+
+test('approved tester pins require exactly two distinct identities', async () => {
+  for (const pins of [[], [testerHashes[0]], [testerHashes[0], testerHashes[0]], [testerHashes[0], 'invalid']]) {
+    await assert.rejects(verifyAudience(audienceFixture(), '6813927476', pins), /two distinct approved/);
+  }
+  const f = audienceFixture();
+  f.routes['betaTesters?filter[apps]=6813927476&limit=200'].reverse();
+  const audience = await verifyAudience(f, '6813927476', testerHashes);
+  assert.deepEqual(audience.testers.map(t => t.id).sort(), ['jim', 'rachel']);
+});
+
+test('individual build assignments allow only distinct subsets of the same two identities', async () => {
+  for (const change of ['none', 'jim', 'rachel', 'both', 'third', 'duplicate-id', 'duplicate-email', 'swapped-id', 'public-invite']) {
+    const f = audienceFixture();
+    const [jim, rachel] = structuredClone(f.routes['betaGroups/owner/betaTesters?limit=200']);
+    let individuals = [];
+    if (change === 'jim') individuals = [jim];
+    if (change === 'rachel') individuals = [rachel];
+    if (change === 'both') individuals = [rachel, jim];
+    if (change === 'third') individuals = [jim, rachel, { ...jim, id: 'other' }];
+    if (change === 'duplicate-id') individuals = [jim, { ...rachel, id: jim.id }];
+    if (change === 'duplicate-email') individuals = [jim, { ...jim, id: rachel.id }];
+    if (change === 'swapped-id') individuals = [{ ...jim, id: rachel.id }, { ...rachel, id: jim.id }];
+    if (change === 'public-invite') individuals = [{ ...jim, attributes: { ...jim.attributes, inviteType: 'PUBLIC_LINK' } }];
+    f.routes['builds/new/individualTesters?limit=200'] = individuals;
+    const api = {
+      all: path => path.startsWith('builds?') ? Promise.resolve([{ id: 'new', attributes: {
+        version: '3', processingState: 'VALID', buildAudienceType: 'INTERNAL_ONLY',
+      } }]) : f.all(path),
+      request: async () => ({ data: { attributes: { internalBuildState: 'IN_BETA_TESTING' } } }),
+    };
+    if (['none', 'jim', 'rachel', 'both'].includes(change)) {
+      const result = await waitForBuild(api, '6813927476', '3', { testerHashes });
+      assert.equal(result.internal_testers, 2);
+      assert.equal(result.external_testers, 0);
+      assert.equal(result.approved_group_attached, true);
+    } else {
+      await assert.rejects(waitForBuild(api, '6813927476', '3', { testerHashes }), /unapproved individual/);
+    }
   }
 });
