@@ -48,8 +48,11 @@ jobs:
       - name: Select Xcode 26
         run: |
           set -euo pipefail
-          selected=$(ls -d /Applications/Xcode_26*.app /Applications/Xcode-26*.app /Applications/Xcode.app 2>/dev/null | sort -V | tail -1)
-          test -n "$selected"
+          shopt -s nullglob
+          candidates=(/Applications/Xcode_26*.app /Applications/Xcode-26*.app)
+          [ ${#candidates[@]} -gt 0 ] || candidates=(/Applications/Xcode.app)
+          selected=$(printf '%s\n' "${candidates[@]}" | sort -V | tail -1)
+          test -d "$selected"
           sudo xcode-select -s "$selected/Contents/Developer"
           xcodebuild -version
       - name: Pick an iPhone simulator
