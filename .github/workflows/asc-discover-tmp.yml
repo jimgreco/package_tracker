@@ -1,0 +1,30 @@
+name: One-off App Store Connect discovery (temporary)
+# GET-only. Prints the app id and TestFlight groups for pinning in release-policy.json.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          repository: jimgreco/release-tools
+          ref: 082f38d35995b50526c43da11fa6a9e73300fd4d
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+        run: |
+          set -euo pipefail
+          d=$(mktemp -d); umask 077
+          printf '%s\n' "$KEY" > "$d/AuthKey.p8"
+          grep -q 'BEGIN PRIVATE KEY' "$d/AuthKey.p8" || base64 -d <<<"$KEY" > "$d/AuthKey.p8"
+          echo '{"bundleId":"com.jimgreco.doorstep","testerEmailSha256s":["a46343858cf3e5e2fda6339f7063190f295ece10dea50979932e69ec57ea4baa","585d07537897adb6073389f204e47c7fb5bc1c743fa8ed3c387334912ca3006d"]}' > "$d/p.json"
+          APP_STORE_CONNECT_API_KEY_PATH="$d/AuthKey.p8" node ios/scripts/asc-readonly.mjs discover-audience --policy "$d/p.json"
+          rm -rf "$d"
