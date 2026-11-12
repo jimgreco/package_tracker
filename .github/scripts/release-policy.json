@@ -1,0 +1,37 @@
+{
+  "app": "porchpong",
+  "appId": "6813927476",
+  "bundleId": "com.jimgreco.doorstep",
+  "teamId": "V6JPQCD336",
+  "certificateSha256": "7fb57dbf0cd7923f9ba97d8801824de79e1ba235dbe78d4a821f8195c30f0bf8",
+  "certificateSha1": "963A7A5107DB8D4C141371C285F71CCAE84A5452",
+  "groups": [
+    {
+      "id": "b0cc8e39-ef93-4d78-87fd-e2781b3e02fc",
+      "name": "Owner",
+      "internal": true,
+      "testers": 2,
+      "automatic": true
+    }
+  ],
+  "profiles": {
+    "app": {
+      "uuid": "698e82c1-f7f5-43e2-aeba-28ae457d24c1",
+      "name": "PorchPong App Store 39824194094-1",
+      "bundleId": "com.jimgreco.doorstep",
+      "groups": [],
+      "appleSignin": [],
+      "push": "production"
+    }
+  },
+  "marketingVersion": "1.3",
+  "apiOrigin": null,
+  "mainInfoPlist": { "PorchPongAPIOrigin": "https://porchpong.com" },
+  "infoPlists": ["ios/PorchPong/Info.plist"],
+  "configuredPlistKeys": [],
+  "testerEmailSha256s": [
+    "a46343858cf3e5e2fda6339f7063190f295ece10dea50979932e69ec57ea4baa",
+    "585d07537897adb6073389f204e47c7fb5bc1c743fa8ed3c387334912ca3006d"
+  ],
+  "buildAudience": "INTERNAL_ONLY"
+}
