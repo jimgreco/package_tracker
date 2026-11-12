@@ -64,7 +64,7 @@ Read current source before implementing; preserve subsequent changes.
 | Google Calendar and ICS/date semantics          | `lib/google.ts`, `lib/calendar.ts`                      |
 | Carrier checks and durable jobs                 | `lib/tracking.ts`, `lib/jobs.ts`                        |
 | Authentication and pipeline regression fixtures | `tests/*.integration.ts`, `tests/*.test.ts`             |
-| EC2 release                                     | `.github/workflows/deploy.yml`, `scripts/deploy-ec2.sh` |
+| EC2 release                                     | `.github/workflows/release.yml` (shared release-tools flow), `.github/release/server.json` |
 
 The existing API uses an HttpOnly `doorstep_session` cookie. Non-GET browser
 requests require the configured Origin. Google login has a browser-oriented

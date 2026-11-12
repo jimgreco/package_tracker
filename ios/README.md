@@ -144,10 +144,7 @@ physical sign-in must be completed by the user when the phone is connected.
 
 ## Release and acceptance
 
-Backend changes deploy through `.github/workflows/deploy.yml`, the `doorstep`
-Compose profile, and `scripts/deploy-ec2.sh`. The workflow runs all backend checks,
-migrates, checks both exact-image container health states, then checks public
-health/build/database and homepage. `ios/` is excluded from Docker context.
+Backend and iOS releases run through `.github/workflows/release.yml` (shared release-tools flow) on every push to `main`. `ios/` is excluded from Docker context.
 
 Local and simulator results, signed archive/export, deployment, and live provider
 acceptance are separate evidence. `ios/VERIFICATION.md` records this delivery.
@@ -164,8 +161,7 @@ and follows [Google's external-user-agent guidance](https://developers.google.co
 
 ## TestFlight
 
-Use the dedicated Mac runner and API-based release workflow in
-[TESTFLIGHT.md](TESTFLIGHT.md). See [VERIFICATION.md](VERIFICATION.md) for recorded
+See [TESTFLIGHT.md](TESTFLIGHT.md). See [VERIFICATION.md](VERIFICATION.md) for recorded
 validation and the distinction between internal availability and device acceptance.
 
 After sign-in, the iPhone app offers a four-screen walkthrough covering Packages,

@@ -1,0 +1,74 @@
+name: Verify
+
+# Every check that gates a merge or a release. Called by release.yml.
+on:
+  workflow_call:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: doorstep_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d doorstep_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/doorstep_test
+      APP_URL: http://127.0.0.1:4317
+      DEMO_MODE: "false"
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Prepare test environment
+        run: touch .env
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run test:integration
+      - run: npm run build
+      - name: Audit production dependencies
+        run: npm audit --omit=dev
+
+  test:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - name: Select Xcode 26
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          candidates=(/Applications/Xcode_26*.app /Applications/Xcode-26*.app)
+          [ ${#candidates[@]} -gt 0 ] || candidates=(/Applications/Xcode.app)
+          selected=$(printf '%s\n' "${candidates[@]}" | sort -V | tail -1)
+          test -d "$selected"
+          sudo xcode-select -s "$selected/Contents/Developer"
+          xcodebuild -version
+      - name: Pick an iPhone simulator
+        id: simulator
+        run: |
+          set -euo pipefail
+          udid=$(xcrun simctl list devices available --json | ruby -rjson -e '
+            devices = JSON.parse(STDIN.read).fetch("devices").select { |runtime, _| runtime.include?("iOS") }.values.flatten
+            phone = devices.reverse.find { |d| d["name"].start_with?("iPhone") }
+            abort("No available iPhone simulator") unless phone
+            puts phone.fetch("udid")')
+          echo "destination=platform=iOS Simulator,id=$udid" >> "$GITHUB_OUTPUT"
+      - name: Run iOS unit tests
+        run: |
+          xcodebuild test -project ios/PorchPong.xcodeproj -scheme PorchPong \
+            -configuration Debug -sdk iphonesimulator \
+            -destination '${{ steps.simulator.outputs.destination }}' \
+            -only-testing:PorchPongTests \
+            CODE_SIGNING_ALLOWED=NO

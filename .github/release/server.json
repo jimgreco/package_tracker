@@ -1,0 +1,28 @@
+{
+  "app": "doorstep",
+  "image": "ghcr.io/jimgreco/package_tracker",
+  "images": [
+    { "context": ".", "dockerfile": "Dockerfile", "build_args": { "APP_BUILD": "{sha}" } }
+  ],
+  "profile": "doorstep",
+  "services": {
+    "doorstep": {
+      "health": ["node", "-e", "fetch('http://127.0.0.1:4317/api/health').then(async r=>{const h=await r.json();process.exit(r.ok&&h.status==='ok'&&h.database==='ready'&&h.build==='{sha}'?0:1)}).catch(()=>process.exit(1))"]
+    },
+    "doorstep-worker": {
+      "health": ["./node_modules/.bin/tsx", "scripts/worker-health.ts"]
+    }
+  },
+  "legacy_overrides": ["doorstep-(recovery|image)-[0-9a-f]{40}(-[a-z0-9-]+)?\\.json"],
+  "backup": { "database": "doorstep", "require_table": "households", "keep": 20 },
+  "preflight": [
+    { "service": "doorstep", "command": ["node", "--input-type=module", "-e", "import pg from 'pg';const p=new pg.Pool({connectionString:process.env.DATABASE_URL});try{await p.query('SELECT 1')}finally{await p.end()}"] }
+  ],
+  "migrate": {
+    "stop_first": true,
+    "commands": [
+      { "service": "doorstep", "command": ["./node_modules/.bin/tsx", "scripts/migrate.ts"] }
+    ]
+  },
+  "public": { "url": "https://porchpong.com/api/health", "field": "build", "length": 40, "refuse_backwards": true }
+}
