@@ -24,7 +24,7 @@
       "push": "production"
     }
   },
-  "marketingVersion": "1.3",
+  "marketingVersion": "1.4",
   "apiOrigin": null,
   "mainInfoPlist": { "PorchPongAPIOrigin": "https://porchpong.com" },
   "infoPlists": ["ios/PorchPong/Info.plist"],
