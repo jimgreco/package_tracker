@@ -97,7 +97,7 @@ export type Settings = {
   calendarFeedUrl: string;
   demo: boolean;
   services: {
-    openai: boolean;
+    ai: boolean;
     easypost: boolean;
     postmark: boolean;
     google: boolean;

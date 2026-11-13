@@ -193,7 +193,7 @@ export function GmailSettings({
             </span>
           </div>
           <p>
-            Matching email contents are sent to OpenAI to extract packages.
+            Matching email contents are sent to Anthropic (Claude) to extract packages.
             Those emails and package details are shared with{" "}
             <strong>{s.householdName}</strong>. Filters can occasionally include
             unrelated messages or miss a package. Each household member connects

@@ -1519,11 +1519,11 @@ export default function Page() {
           >
             <p className="form-intro">
               Include the original message date, item names, and tracking links.
-              The email text will be sent to OpenAI to extract package details.
+              The email text will be sent to Anthropic (Claude) to extract package details.
             </p>
             {data?.settings.demo && (
               <div className="info-box">
-                Create your household and connect OpenAI to process real emails.
+                Create your household and connect Claude to process real emails.
                 You can explore manual package entry in this preview.
               </div>
             )}

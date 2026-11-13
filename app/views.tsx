@@ -638,7 +638,7 @@ export function SettingsView({
             <div className="settings-divider" />
             <h3>Connected services</h3>
             {[
-              ["OpenAI · email extraction", s.services.openai],
+              ["Claude · email extraction", s.services.ai],
               ["Postmark · incoming email", s.services.postmark],
               ["EasyPost · delivery tracking", s.services.easypost],
               ["Google · calendar connection", s.services.google],

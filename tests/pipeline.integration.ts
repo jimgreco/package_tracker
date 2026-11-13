@@ -47,7 +47,7 @@ before(async () => {
   await admin.query(`CREATE DATABASE "${testDb}"`);
   dbUrl.pathname = "/" + testDb;
   process.env.DATABASE_URL = dbUrl.toString();
-  process.env.OPENAI_API_KEY = "fixture-key";
+  process.env.ANTHROPIC_API_KEY = "fixture-key";
   delete process.env.S3_BUCKET;
   uploadDir = await mkdtemp(join(tmpdir(), "doorstep-test-uploads-"));
   process.env.UPLOAD_DIR = uploadDir;
@@ -585,7 +585,7 @@ test("durable queue claims once and reclaims an expired lease", async () => {
   assert.notEqual(second!.lease_token, first.lease_token);
   await query("UPDATE jobs SET status='done'");
 });
-test("OpenAI structured extraction uses saved email and commits parsed output", async () => {
+test("Claude structured extraction uses saved email and commits parsed output", async () => {
   const email = await incoming(
     "sdk-extraction",
     "Test Shop ORDER-SDK TRACKSDK Socks shipped September 13, 2026.",
@@ -594,28 +594,25 @@ test("OpenAI structured extraction uses saved email and commits parsed output", 
   out.orders[0].orderNumber = "ORDER-SDK";
   let called = false;
   globalThis.fetch = async (input, init) => {
-    assert.ok(String(input).includes("api.openai.com"));
+    assert.ok(String(input).includes("api.anthropic.com/v1/messages"));
     const body = JSON.parse(String(init?.body));
-    assert.equal(body.store, false);
-    assert.equal(body.text.format.type, "json_schema");
+    assert.equal(body.model, "claude-opus-5-5");
+    assert.equal(body.fallbacks, "default");
+    assert.equal(body.output_config.format.type, "json_schema");
+    assert.equal(body.temperature, undefined);
+    assert.ok(!JSON.stringify(body.output_config.format.schema).includes("maxLength"));
+    assert.ok(body.system.includes("untrusted data"));
+    assert.ok(JSON.parse(body.messages[0].content).text.includes("TRACKSDK"));
     called = true;
     return Response.json({
-      id: "resp_fixture",
-      object: "response",
-      created_at: 1,
-      status: "completed",
-      model: "gpt-4.1-mini",
-      output: [
-        {
-          id: "msg_fixture",
-          type: "message",
-          status: "completed",
-          role: "assistant",
-          content: [
-            { type: "output_text", text: JSON.stringify(out), annotations: [] },
-          ],
-        },
-      ],
+      id: "msg_fixture",
+      type: "message",
+      role: "assistant",
+      model: "claude-opus-5-5",
+      stop_reason: "end_turn",
+      stop_sequence: null,
+      usage: { input_tokens: 1, output_tokens: 1 },
+      content: [{ type: "text", text: JSON.stringify(out) }],
     });
   };
   await extractEmail(email.id);

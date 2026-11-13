@@ -4,6 +4,7 @@ import {
   nativeCalendarCallback,
   calendarBrowserCookie,
 } from "@/lib/native-calendar";
+import { hasAiKey } from "@/lib/ai-client";
 import {
   notificationSettings,
   saveNotificationSettings,
@@ -551,9 +552,9 @@ async function handle(
     }
     if (route === "emails" && method === "POST") {
       requireReal(ctx);
-      if (!process.env.OPENAI_API_KEY)
+      if (!hasAiKey())
         throw new AppError(
-          "Connect OpenAI in the server configuration before parsing an email.",
+          "Connect Claude in the server configuration before parsing an email.",
           503,
         );
       await rateLimit(`paste:${ctx.householdId}`, 100, 86400);
@@ -606,8 +607,8 @@ async function handle(
       }
       if (path[2] === "retry" && method === "POST") {
         requireReal(ctx);
-        if (!process.env.OPENAI_API_KEY)
-          throw new AppError("OpenAI is not configured.", 503);
+        if (!hasAiKey())
+          throw new AppError("Claude is not configured.", 503);
         if (email.status === "processed") return json({ ok: true });
         await query(
           "UPDATE source_emails SET status='queued',error=NULL WHERE id=$1",

@@ -30,7 +30,7 @@ async page => {
     settings: {
       plan: "free", isAdmin: false, householdName: "Synthetic search household", timeZone: "UTC",
       forwardingAddress: null, calendarFeedUrl: "https://example.test/synthetic.ics", demo: false,
-      services: { openai: false, easypost: false, postmark: false, google: false, storage: false, gmail: false },
+      services: { ai: false, easypost: false, postmark: false, google: false, storage: false, gmail: false },
       google: { connected: false, calendarId: null, lastSyncedAt: null, error: null },
       gmail: { connected: false, email: null, enabled: false, needsReconnect: false, lastSyncedAt: null,
         importedCount: 0, importing: false, error: null, otherHouseholdName: null },
