@@ -21,7 +21,7 @@ jobs:
           node-version: 22
       # Shared engine: source binding, GET-only App Store Connect preflight,
       # temporary keychain and pinned existing profiles. No Apple writes.
-      - uses: jimgreco/release-tools/ios/prepare@082f38d35995b50526c43da11fa6a9e73300fd4d
+      - uses: jimgreco/release-tools/ios/prepare@bfd9d14bb12907b74bceaa28b7c0382fb3549ea6
         with:
           policy: .github/scripts/release-policy.json
           app-store-connect-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
@@ -32,11 +32,11 @@ jobs:
           keychain-password: ${{ secrets.KEYCHAIN_PASSWORD }}
       # No configure step: prepare stamps ReleaseCommit into Info.plist and the
       # engine sets CURRENT_PROJECT_VERSION to the Git commit count.
-      - uses: jimgreco/release-tools/ios/upload@082f38d35995b50526c43da11fa6a9e73300fd4d
+      - uses: jimgreco/release-tools/ios/upload@bfd9d14bb12907b74bceaa28b7c0382fb3549ea6
         with:
           project: ios/PorchPong.xcodeproj
           scheme: PorchPong
           extra-build-settings: |
             PROVISIONING_PROFILE_SPECIFIER=@PROFILE_UUID:app@
-      - uses: jimgreco/release-tools/ios/cleanup@082f38d35995b50526c43da11fa6a9e73300fd4d
+      - uses: jimgreco/release-tools/ios/cleanup@bfd9d14bb12907b74bceaa28b7c0382fb3549ea6
         if: always()
