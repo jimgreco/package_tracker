@@ -12,7 +12,7 @@ Web and iPhone remember the package search and filter for each signed-in account
 - Package search on web and iPhone matches every word across shop, carrier, item, note, order number, and tracking number. Combine details such as `coffee FedEx`; extra spaces and letter case do not affect results. The selected package filter still applies.
 - Separate household, order, item, shipment, email, and tracking-event records in PostgreSQL.
 - Postmark inbound webhook with Basic authentication, private per-household routing, attachment ingestion, durable processing, and retry-safe deduplication.
-- OpenAI Responses API extraction with a strict schema, `store: false`, original-message context, evidence, missing-value handling, and review flags. The model cannot browse or call tools.
+- Claude (Anthropic Messages API) extraction with a strict JSON schema, original-message context, evidence, missing-value handling, and review flags. The model cannot browse or call tools.
 - Product images from inline attachments or email image references. Remote images are cached through a bounded HTTPS downloader that pins a public IPv4 address and checks redirects. Unavailable images fall back to a shop initial.
 - EasyPost external-shipment registration, authenticated webhook updates, carrier history, and scheduled reconciliation. Out-for-delivery checks are scheduled every 15 minutes, other active shipments every 4 hours; actual carrier freshness depends on EasyPost.
 - Durable PostgreSQL jobs with transactional enqueueing, independent worker, leases, retry/backoff, and a failed-job retry control.
@@ -66,11 +66,11 @@ The sample household stays separate. Set `DEMO_MODE=false` beyond the local prev
 
 Use `.env.example` as the configuration reference. Restart both the web process and worker after changes. Store real credentials in your hosting environment or secret manager, never in Git. `APP_URL` must be the exact browser origin (scheme, host, and port); production must use HTTPS.
 
-### 1. OpenAI
+### 1. Anthropic (Claude)
 
-Set `OPENAI_API_KEY`. `OPENAI_MODEL` defaults to `gpt-4.1-mini` and can be set to another Responses API model supporting Structured Outputs. Email text, links, and product image references are submitted for extraction; raw source email is retained in your PostgreSQL database for review. This implementation uses text extraction, not OCR for screenshot-only or PDF-only notices.
+Set `ANTHROPIC_API_KEY`. `ANTHROPIC_MODEL` defaults to `claude-opus-5-5` and can be set to another Claude model that supports structured outputs. Requests use the server-side fallback beta, so an overloaded model falls back automatically. Email text, links, and product image references are submitted for extraction; raw source email is retained in your PostgreSQL database for review. This implementation uses text extraction, not OCR for screenshot-only or PDF-only notices.
 
-- [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs)
+- [Structured outputs](https://platform.claude.com/docs/en/build-with-claude/structured-outputs)
 
 ### 2. Postmark inbound email
 
@@ -128,7 +128,7 @@ The separate Calendar connection requests only `https://www.googleapis.com/auth/
 
 Enable the Gmail API in the same Google Cloud project, add the Gmail callback above to the existing web client, and declare `https://www.googleapis.com/auth/gmail.readonly` in Data Access. Set `GMAIL_ENABLED=true` in the private server environment after setup. Gmail connections require a paid household assigned by a platform admin. For a personal-use rollout, set `GMAIL_HOUSEHOLD_ID` to the allowed household UUID; connection routes and background ingestion then reject other households. Leave it unset only for a rollout with the applicable Google verification. No new API key is needed. Sign-in and Calendar continue requesting their original scopes; Gmail separately requests `openid email gmail.readonly` with browser-bound state, PKCE, nonce, verified signed identity, and the same Google subject as the signed-in user.
 
-In Settings → Automatic package import, each member chooses **New emails only** (default) or **Last 30 days and new emails**, then connects their own inbox. Matching source messages and extracted packages are shared with the selected household and processed by OpenAI; this disclosure appears before connecting. Google grants mailbox-wide read access, while PorchPong limits ingestion using a shipping/order search. Filters are heuristic: they may miss messages or include unrelated ones. Existing manual forwarding remains available.
+In Settings → Automatic package import, each member chooses **New emails only** (default) or **Last 30 days and new emails**, then connects their own inbox. Matching source messages and extracted packages are shared with the selected household and processed by Anthropic (Claude); this disclosure appears before connecting. Google grants mailbox-wide read access, while PorchPong limits ingestion using a shipping/order search. Filters are heuristic: they may miss messages or include unrelated ones. Existing manual forwarding remains available.
 
 The durable worker polls every five minutes with fixed scan windows, pagination checkpoints, a one-day overlap for delayed indexing, and stable mailbox/message deduplication. Already imported sources re-use the existing extraction and shipment matching pipeline. Gmail messages are never marked read, modified, or sent. Checks continue while the browser is closed and catch up after downtime. This version uses polling, not Pub/Sub; attachments other than message text are not imported, while images referenced by the HTML use the existing image pipeline.
 
@@ -179,7 +179,7 @@ Production URL: `https://porchpong.com`. The public application repository is `j
 
 Releases use the shared [release-tools](https://github.com/jimgreco/release-tools) flow, like every other app on the shared host. `.github/workflows/release.yml` is the standard template: pull requests run `verify.yml` only; a push to `main` runs verify, then releases the server (`.github/release/server.json`) and uploads a TestFlight build (`testflight.yml`). A manual run on `main` releases what its checkboxes select. The server release builds the ARM64 image in CI, takes the shared host release lock, checks for Compose drift, backs up the `doorstep` database, runs a database preflight, stops `doorstep` and `doorstep-worker`, migrates, and starts both from the exact-commit image. Both health checks and the public `/api/health` build must match before it succeeds.
 
-Repository deployment secrets: `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`, and `EC2_SSH_KNOWN_HOSTS` (the pinned server host-key entry). Application credentials stay in `~/deploy/doorstep.env` on EC2; they are never copied into the image or public repository. Use `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `OPENAI_API_KEY`, and the receiving/tracking variables from `.env.example`. Google redirects for production are:
+Repository deployment secrets: `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`, and `EC2_SSH_KNOWN_HOSTS` (the pinned server host-key entry). Application credentials stay in `~/deploy/doorstep.env` on EC2; they are never copied into the image or public repository. Use `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ANTHROPIC_API_KEY`, and the receiving/tracking variables from `.env.example`. Google redirects for production are:
 
 - `https://porchpong.com/api/auth/google/callback`
 - `https://porchpong.com/api/google/callback`
@@ -198,7 +198,7 @@ npm run test:integration
 npm run build
 ```
 
-Unit tests cover calendar precision, exclusive ends, DST, stable UIDs, input cleanup, safe image URLs. Integration tests create a uniquely named database on the **local** PostgreSQL server and delete that newly created database afterward. They exercise concurrent duplicate email ingestion, split shipments, hallucinated tracking rejection, stale carrier events, household isolation, durable leases/retries, OpenAI SDK structured parsing, and Google event upsert/delete/recreate behavior. Google account tests verify real RSA-signed token fixtures, rejected signatures/claims, state replay and browser binding, automatic account creation, member access, removal, and household switching. All external HTTP responses in these tests are fixtures.
+Unit tests cover calendar precision, exclusive ends, DST, stable UIDs, input cleanup, safe image URLs. Integration tests create a uniquely named database on the **local** PostgreSQL server and delete that newly created database afterward. They exercise concurrent duplicate email ingestion, split shipments, hallucinated tracking rejection, stale carrier events, household isolation, durable leases/retries, Claude structured-output parsing, and Google event upsert/delete/recreate behavior. Google account tests verify real RSA-signed token fixtures, rejected signatures/claims, state replay and browser binding, automatic account creation, member access, removal, and household switching. All external HTTP responses in these tests are fixtures.
 
 Live acceptance still requires real accounts and representative emails:
 
@@ -214,7 +214,7 @@ Packages sort newest first by their earliest source-email sent date (falling bac
 
 **Mark delivered** confirms receipt without inventing a delivery date; edit details to supply one. **Dismiss** hides a package from active lists and calendars and stops tracking checks. Restore it from **Dismissed**. Nonphysical receipts are ignored by extraction and hidden from the shipping inbox while source records remain stored. Physical orders without tracking and recurring physical deliveries remain eligible.
 
-An optional live extraction regression check uses synthetic emails and makes no database changes: `node --import tsx scripts/eval-extraction.ts`, with OpenAI credentials supplied privately in the environment. This calls the configured model and is intentionally separate from the mocked test suite.
+An optional live extraction regression check uses synthetic emails and makes no database changes: `node --import tsx scripts/eval-extraction.ts`, with Anthropic credentials supplied privately in the environment. This calls the configured model and is intentionally separate from the mocked test suite.
 
 ## Key files
 

@@ -18,6 +18,7 @@ import {
 } from "./mail-source-link";
 import { trackingConfigured } from "./tracking-config";
 import { attentionReasons } from "./attention";
+import { hasAiKey } from "./ai-client";
 const iso = (d: unknown) =>
   d instanceof Date ? d.toISOString() : typeof d === "string" ? d : null;
 export function mapShipment(r: Record<string, unknown>): Shipment {
@@ -130,7 +131,7 @@ export async function settings(ctx: Context): Promise<Settings> {
     calendarFeedUrl: `${origin()}/api/calendar/${ctx.feedToken}.ics`,
     demo: ctx.demo,
     services: {
-      openai: !!process.env.OPENAI_API_KEY,
+      ai: hasAiKey(),
       easypost: !!process.env.EASYPOST_API_KEY,
       postmark:
         !!process.env.POSTMARK_WEBHOOK_PASSWORD && !!process.env.INBOUND_DOMAIN,

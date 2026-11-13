@@ -36,8 +36,8 @@ export default function PrivacyPage() {
 
       <h2>How the information is used and shared</h2>
       <p>
-        Postmark receives and delivers forwarded emails to PorchPong. OpenAI
-        receives email text, links, and image references to extract order and
+        Postmark receives and delivers forwarded emails to PorchPong. Anthropic
+        (Claude) receives email text, links, and image references to extract order and
         shipping information. For eligible accounts, EasyPost receives tracking
         numbers and carrier information to retrieve delivery updates. AWS hosts
         PorchPong and its database, and Cloudflare handles website traffic and
@@ -59,7 +59,7 @@ export default function PrivacyPage() {
         shipping-email-only permission. PorchPong searches for likely order and
         shipping messages and downloads matching email bodies, headers, links,
         and image references. These matching source messages are saved in your
-        household and sent to OpenAI for package extraction. Filtering can
+        household and sent to Anthropic (Claude) for package extraction. Filtering can
         occasionally match an unrelated message or miss a shipment.
       </p>
       <p>

@@ -1,4 +1,4 @@
-// Explicit opt-in live evaluation. Uses synthetic emails, calls OpenAI, and writes no app data.
+// Explicit opt-in live evaluation. Uses synthetic emails, calls Claude, and writes no app data.
 // Run with production credentials only in the private server environment:
 // node --import tsx scripts/eval-extraction.ts
 import assert from "node:assert/strict";

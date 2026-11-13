@@ -226,7 +226,7 @@ the database. Calendar exclusive-end conversion stays in the backend. Missing
 dates stay missing; ambiguous DST values should receive the existing review flow.
 
 Google Calendar and ICS remain projections of server shipments. Never create
-parallel native calendar events, recalculate shipment identity, call OpenAI, or
+parallel native calendar events, recalculate shipment identity, call the AI model, or
 poll carriers from the phone. Keep stable server shipment and calendar IDs.
 
 ## 5. Native authentication: required backend work
