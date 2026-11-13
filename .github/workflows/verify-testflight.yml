@@ -1,0 +1,71 @@
+name: Verify existing TestFlight build
+
+on:
+  workflow_dispatch:
+    inputs:
+      build:
+        description: Existing uploaded iOS Git-count build
+        type: string
+        required: true
+      source_sha:
+        description: Full source commit of that uploaded build
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+    - uses: actions/checkout@v5
+      with:
+        repository: jimgreco/release-tools
+        ref: bfd9d14bb12907b74bceaa28b7c0382fb3549ea6
+        path: .release-tools
+        persist-credentials: false
+    - uses: actions/setup-node@v5
+      with:
+        node-version: 22
+    - name: Check existing build source and read guards
+      env:
+        SOURCE_SHA: ${{ inputs.source_sha }}
+        BUILD_NUMBER: ${{ inputs.build }}
+      run: |
+        set -euo pipefail
+        [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+        [[ "$BUILD_NUMBER" =~ ^[1-9][0-9]*$ ]]
+        git merge-base --is-ancestor "$SOURCE_SHA" HEAD
+        test "$(git rev-list --count "$SOURCE_SHA")" = "$BUILD_NUMBER"
+        node .release-tools/ios/scripts/asc-readonly.mjs validate-policy --policy .github/scripts/release-policy.json
+    - name: Read Apple processing and existing audience only
+      env:
+        SOURCE_SHA: ${{ inputs.source_sha }}
+        BUILD_NUMBER: ${{ inputs.build }}
+        APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+        APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+      run: |
+        set -euo pipefail
+        umask 077
+        VERIFY_TEMP="$(mktemp -d "$RUNNER_TEMP/native-read.XXXXXX")"
+        trap 'rm -f "$VERIFY_TEMP/key.p8"; rmdir "$VERIFY_TEMP"' EXIT
+        export APP_STORE_CONNECT_API_KEY_PATH="$VERIFY_TEMP/key.p8"
+        python3 - <<'PYKEY'
+        import base64, os
+        key = os.environ['API_KEY'].strip().replace('\\n', '\n')
+        if 'BEGIN PRIVATE KEY' not in key:
+            key = base64.b64decode(key).decode()
+        if 'BEGIN PRIVATE KEY' not in key:
+            raise SystemExit('Existing app-specific API authentication is unavailable.')
+        with open(os.environ['APP_STORE_CONNECT_API_KEY_PATH'], 'x') as file:
+            file.write(key.rstrip() + '\n')
+        PYKEY
+        node .release-tools/ios/scripts/asc-readonly.mjs verify-upload --policy .github/scripts/release-policy.json --sha "$SOURCE_SHA" --build "$BUILD_NUMBER"
